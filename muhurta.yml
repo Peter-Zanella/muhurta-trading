@@ -1,0 +1,83 @@
+name: Muhūrta Trading
+
+on:
+  workflow_dispatch:
+    inputs:
+      modus:
+        description: "Kauf oder Verkauf"
+        type: choice
+        options: [kauf, verkauf]
+        default: kauf
+      markt:
+        description: "Markt / Handelszeiten"
+        type: choice
+        options: [SIX, XETRA, LSE, NYSE, KRYPTO, ALLE]
+        default: SIX
+      tage:
+        description: "Anzahl Tage ab Startdatum"
+        default: "7"
+      von:
+        description: "Startdatum JJJJ-MM-TT (leer = heute)"
+        default: ""
+      abgleich:
+        description: "Abgleich-Zeitpunkt JJJJ-MM-TT HH:MM (leer = normale Berechnung)"
+        default: ""
+  schedule:
+    - cron: "0 4 * * 1"   # jeden Montag 04:00 UTC
+
+jobs:
+  berechnen:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Muhūrta-Repo auschecken
+        uses: actions/checkout@v4
+
+      # Einzige Rechenquelle: astro_engine.py aus Ved Chart Calc
+      - name: Ved Chart Calc (astro_engine) auschecken
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.ENGINE_REPO }}
+          ref: ${{ vars.ENGINE_REF || 'main' }}
+          token: ${{ secrets.ENGINE_TOKEN || github.token }}
+          path: engine
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11.9"
+
+      - name: Abhängigkeiten installieren
+        run: pip install -r requirements.txt
+
+      - name: Muhūrta berechnen
+        env:
+          ASTRO_ENGINE_PATH: ${{ github.workspace }}/engine/${{ vars.ENGINE_DIR }}
+          GEBURT: ${{ secrets.GEBURT }}
+          GEBURT_TZ: ${{ secrets.GEBURT_TZ }}
+          GEBURT_LAT: ${{ secrets.GEBURT_LAT }}
+          GEBURT_LON: ${{ secrets.GEBURT_LON }}
+        run: |
+          echo "Engine: ${{ vars.ENGINE_REPO }} @ $(git -C engine rev-parse --short HEAD)" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ -n "${{ inputs.abgleich }}" ]; then
+            {
+              echo '```'
+              python muhurta_trading.py --modus "${{ inputs.modus || 'kauf' }}" --abgleich "${{ inputs.abgleich }}"
+              echo '```'
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          VON_ARG=""
+          if [ -n "${{ inputs.von }}" ]; then VON_ARG="--von ${{ inputs.von }}"; fi
+          python muhurta_trading.py \
+            --modus "${{ inputs.modus || 'kauf' }}" \
+            --markt "${{ inputs.markt || 'SIX' }}" \
+            --tage "${{ inputs.tage || '7' }}" \
+            $VON_ARG \
+            --csv muhurta_fenster.csv \
+            --markdown "$GITHUB_STEP_SUMMARY"
+
+      - name: CSV hochladen
+        if: ${{ hashFiles('muhurta_fenster.csv') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: muhurta-fenster
+          path: muhurta_fenster.csv

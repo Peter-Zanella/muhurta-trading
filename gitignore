@@ -1,0 +1,5 @@
+# astro_engine kommt aus Ved Chart Calc – nie hier einchecken
+engine/
+astro_engine.py
+__pycache__/
+*.csv
