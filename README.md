@@ -100,6 +100,10 @@ Vyatīpāta/Vaidhṛti-Yoga, Vadha-Tārā, Candrāṣṭama.
 | Abhijit Muhūrta (nicht mittwochs) | +2 |
 | 8. Haus vom Muhūrta-Lagna besetzt | −2 |
 | Wohltäter in Kendra/Trikoṇa (max.) | +2 |
+| 2. Haus (Finanzen) und 5. Haus (Spekulation), je Haus: besetzt von Mars/Saturn/Rāhu/Ketu / nur Sonne | −2 / −1 |
+| … aspektiert von einem Übeltäter (Graha-Dṛṣṭi wie Engine) | −1 |
+| … Hausherr im 6./8./12. vom Muhūrta-Lagna | −1 |
+| … unbelastet (nichts davon) | +1 |
 | Lagna im 2./11. / 1./10. / 6./8./12. vom Janma-Lagna | +2 / +1 / −2 |
 
 ★★★ ab 12, ★★ ab 8, ★ ab Mindestscore (Standard 5). Gewichte und Listen oben in

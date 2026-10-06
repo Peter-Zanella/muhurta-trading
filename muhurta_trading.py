@@ -138,6 +138,15 @@ HORA_PUNKTE = {"Mercury": 3, "Jupiter": 2, "Venus": 2, "Moon": 1,
 
 WOHLTAETER = {"Mercury", "Jupiter", "Venus"}
 
+# Schutz von 2. Haus (Finanzen, Dhana) und 5. Haus (Spekulation) vom Muhūrta-Lagna
+UEBELTAETER = {"Sun", "Mars", "Saturn", "Rahu", "Ketu"}
+GESCHUETZTE_HAEUSER = {2: "2. Haus (Finanzen)", 5: "5. Haus (Spekulation)"}
+HAUS_UEBEL_BESETZT = -2        # Mars, Saturn, Rāhu, Ketu im Haus
+HAUS_SONNE_BESETZT = -1        # Sonne allein im Haus (milder Übeltäter)
+HAUS_UEBEL_ASPEKT = -1         # Graha-Dṛṣṭi eines Übeltäters (engine: graha_aspects_by_sign)
+HAUS_HERR_DUSTHANA = -1        # Hausherr im 6./8./12. vom Muhūrta-Lagna
+HAUS_REIN = 1                  # weder besetzt noch aspektiert, Herr gut gestellt
+
 # Handelszeiten: (Zeitzone, Öffnung, Schluss, nur Werktage)
 MAERKTE = {
     "SIX": ("Europe/Zurich", time(9, 0), time(17, 30), True),
@@ -421,6 +430,32 @@ def bewerten(jd: float, tag: Tag, radix: Radix, modus: str,
     wohl = sum(1 for haus in (1, 4, 5, 7, 9, 10)
                for g in besetzung.get((lagna + haus - 1) % 12, []) if g in WOHLTAETER)
     b.punkte(min(wohl, 2), "Wohltäter in Kendra/Trikoṇa")
+
+    # 2. und 5. Haus vom Muhūrta-Lagna: Affliktionen prüfen
+    aspekte = ae.graha_aspects_by_sign({g: {"sign_idx": int(lons[g] // 30) % 12}
+                                        for g in GRAHAS})
+    for haus, name in GESCHUETZTE_HAEUSER.items():
+        zeichen = (lagna + haus - 1) % 12
+        rein = True
+        insassen = [g for g in besetzung.get(zeichen, []) if g in UEBELTAETER]
+        if insassen:
+            rein = False
+            p_bes = HAUS_SONNE_BESETZT if insassen == ["Sun"] else HAUS_UEBEL_BESETZT
+            b.punkte(p_bes, f"{name} besetzt von {', '.join(PLANET_DE[g] for g in insassen)}")
+        aspektierer = [g for g in aspekte.get(zeichen, [])
+                       if g in UEBELTAETER and g not in insassen]
+        if aspektierer:
+            rein = False
+            b.punkte(HAUS_UEBEL_ASPEKT,
+                     f"{name} aspektiert von {', '.join(PLANET_DE[g] for g in aspektierer)}")
+        herr = ae.SIGN_LORDS[ae.SIGNS[zeichen]]
+        herr_haus = (int(lons[herr] // 30) % 12 - lagna) % 12 + 1
+        if herr_haus in (6, 8, 12):
+            rein = False
+            b.punkte(HAUS_HERR_DUSTHANA,
+                     f"Herr vom {name} ({PLANET_DE[herr]}) im {herr_haus}. Haus")
+        if rein:
+            b.punkte(HAUS_REIN, f"{name} unbelastet")
 
     rel = (lagna - radix.lagna_rashi) % 12 + 1
     if rel in (6, 8, 12):
