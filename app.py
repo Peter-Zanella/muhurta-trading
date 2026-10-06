@@ -8,7 +8,8 @@ Rechnet über muhurta_trading.py, das seinerseits ausschliesslich astro_engine.p
 
 Routen:
   /            Formular + Zeitfenster mit Tagesleiste
-  /abgleich    Detailwerte eines Zeitpunkts (wie --abgleich)
+  /slot        Muhūrta-Detail eines Zeitpunkts mit Chart (Klick in der Tagesleiste)
+  /abgleich    Rohdaten eines Zeitpunkts (wie --abgleich)
   /api/fenster Zeitfenster als JSON
   /login       Zugangsschlüssel (nur wenn APP_KEY gesetzt)
   /health      für Render
@@ -291,6 +292,40 @@ label.ort input{width:100%}
 pre{background:var(--tafel);border:1px solid var(--linie);border-radius:8px;padding:16px;
   overflow-x:auto;font-size:.82rem;line-height:1.45}
 footer{margin-top:40px;color:var(--leise);font-size:.82rem}
+a.slot{display:block}
+.slot.aktiv{outline:2px solid var(--text);outline-offset:1px;position:relative;z-index:1}
+a.slot:focus-visible{outline:2px solid var(--kurkuma);outline-offset:1px;position:relative;z-index:2}
+a.detail{margin-left:auto;font-size:.9rem}
+.status{margin:4px 0 0}
+.gesperrt-text{color:#e79aa9}
+h2.abstand{margin-top:24px}
+.detail-raster{display:grid;grid-template-columns:minmax(0,420px) minmax(0,1fr);gap:32px;
+  align-items:start;margin:24px 0 32px}
+.detail-raster h2{margin-bottom:10px}
+.chart-wahl{display:inline-flex;border:1px solid var(--linie);border-radius:6px;overflow:hidden;margin-bottom:10px}
+.chart-wahl button{background:transparent;color:var(--leise);border-radius:0;padding:6px 12px}
+.chart-wahl button[aria-pressed=true]{background:var(--kurkuma);color:#1b1404}
+.chart[data-stil=nord] .sued,.chart[data-stil=sued] .nord{display:none}
+.chart-svg{width:100%;max-width:420px;height:auto;display:block}
+.chart-svg .feld{fill:var(--tafel);stroke:#4a5890;stroke-width:1}
+.chart-svg .linie{fill:none;stroke:#4a5890;stroke-width:1}
+.chart-svg .mitte{fill:var(--nacht);stroke:#4a5890;stroke-width:1}
+.chart-svg text{font-family:"Work Sans",system-ui,sans-serif;font-size:13px;fill:var(--text)}
+.chart-svg .zeichen{font-size:10px;fill:var(--leise)}
+.chart-svg .nummer{font-size:11px;fill:var(--leise)}
+.chart-svg .la{fill:var(--kurkuma);font-weight:500}
+.chart-svg .lagna-strich{stroke:var(--kurkuma);stroke-width:1.5}
+.chart-svg .mitte-text{font-family:"Spectral",Georgia,serif;font-size:16px}
+dl.panchanga{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:0}
+dl.panchanga dt{color:var(--leise)}
+dl.panchanga dd{margin:0}
+ul.faktoren{margin:0;padding-left:18px;color:var(--leise)}
+.tabelle{overflow-x:auto;margin-top:10px}
+table.grahas{border-collapse:collapse;width:100%;font-size:.9rem}
+table.grahas th,table.grahas td{text-align:left;padding:7px 12px 7px 0;border-bottom:1px solid var(--linie);white-space:nowrap}
+table.grahas th{color:var(--leise);font-weight:400}
+.navigation{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:28px}
+@media (max-width:760px){.detail-raster{grid-template-columns:1fr}}
 @media (max-width:600px){h1{font-size:1.9rem}.seite{padding:20px 14px 40px}}
 """
 
@@ -308,6 +343,10 @@ def seite(titel: str, inhalt: str, ort: str = "") -> HTMLResponse:
     fuss = (f"<footer>Rechenquelle: astro_engine.py (Ved Chart Calc, Commit {E(ENGINE_COMMIT)}). "
             f"{ort_text}Astrologische Auswertung, keine Anlageberatung.</footer>")
     return HTMLResponse(KOPF.format(titel=E(titel), css=CSS) + inhalt + fuss + "</main></body></html>")
+
+
+def wochentag_so0(d: date) -> int:
+    return (d.weekday() + 1) % 7
 
 
 def datum_lang(d: date, wt: int) -> str:
@@ -362,22 +401,69 @@ def formular(p: dict) -> str:
 </form>"""
 
 
+def basis_query(p: dict) -> dict:
+    q = {"modus": p["modus"], "markt": p["markt"],
+         "schritt": str(p.get("schritt_i", 15)), "min": str(p.get("min_i", 5))}
+    q.update(geburt_query(p))
+    return q
+
+
+def url(pfad: str, p: dict, **extra) -> str:
+    return pfad + "?" + urllib.parse.urlencode({**basis_query(p), **extra})
+
+
+def slot_url(p: dict, t: datetime) -> str:
+    return url("/slot", p, zeit=f"{t:%Y-%m-%d %H:%M}")
+
+
+def leiste_html(p: dict, slots: list, beste: list, aktuell: datetime | None = None) -> str:
+    """Tagesleiste; jedes Feld führt zum Muhūrta-Detail dieses Zeitpunkts."""
+    zellen, stunden = [], []
+    for t, bew in slots:
+        klasse, stil = slot_style(bew, p["min_i"])
+        if any(f.von <= t < f.bis for f in beste):
+            klasse += " top"
+        if aktuell is not None and t == aktuell:
+            klasse += " aktiv"
+        if bew.gesperrt:
+            tip = f"{t:%H:%M} gesperrt: {', '.join(bew.sperren)}"
+        else:
+            tip = f"{t:%H:%M} Score {bew.score}"
+        aktiv = ' aria-current="true"' if "aktiv" in klasse else ""
+        zellen.append(f'<a class="{klasse}" style="{stil}" href="{E(slot_url(p, t))}" '
+                      f'title="{E(tip)}" aria-label="{E(tip)}"{aktiv}></a>')
+        stunden.append(f'<div class="stunde">{t:%H}</div>' if t.minute == 0 else "<div></div>")
+    spalten = f"grid-template-columns:repeat({len(slots)},minmax(5px,1fr))"
+    return (f'<div class="leiste-rahmen"><nav class="leiste" style="{spalten}" '
+            f'aria-label="Zeitpunkte des Tages">{"".join(zellen)}</nav>'
+            f'<div class="leiste" style="{spalten}" aria-hidden="true">{"".join(stunden)}</div></div>')
+
+
+def tag_kopf(d: date, tag, tz) -> str:
+    rk = [mt.dt_aus_jd(x, tz) for x in tag.achtel_zeit(mt.RAHU_KALA[tag.wochentag])]
+    return (f'<div class="tag-kopf"><h2>{E(datum_lang(d, tag.wochentag))}</h2>'
+            f'<span class="sonne">{E(mt.VARA[tag.wochentag])}, Aufgang '
+            f'{mt.dt_aus_jd(tag.aufgang, tz):%H:%M}, Untergang '
+            f'{mt.dt_aus_jd(tag.untergang, tz):%H:%M}, Rāhu Kāla '
+            f'{rk[0]:%H:%M}–{rk[1]:%H:%M}</span></div>')
+
+
+def faktoren_liste(faktoren: list) -> str:
+    return "".join(f'<li class="plus">{E(t)} ({pkt:+d})</li>' if pkt > 0
+                   else f"<li>{E(t)} ({pkt:+d})</li>"
+                   for pkt, t in sorted(faktoren, key=lambda x: -x[0]))
+
+
 def tage_html(p, kalender, fenster, protokoll) -> str:
     tz = kalender.tz
     nach_tag: dict[date, list] = {}
     for t, bew in protokoll:
         nach_tag.setdefault(t.date(), []).append((t, bew))
-    extra = geburt_query(p)
     teile = []
     d = p["von_d"]
     for _ in range(p["tage_i"]):
         tag = kalender.fuer_datum(d)
-        rk = [mt.dt_aus_jd(x, tz) for x in tag.achtel_zeit(mt.RAHU_KALA[tag.wochentag])]
-        kopf = (f'<div class="tag-kopf"><h2>{E(datum_lang(d, tag.wochentag))}</h2>'
-                f'<span class="sonne">{E(mt.VARA[tag.wochentag])}, Aufgang '
-                f'{mt.dt_aus_jd(tag.aufgang, tz):%H:%M}, Untergang '
-                f'{mt.dt_aus_jd(tag.untergang, tz):%H:%M}, Rāhu Kāla '
-                f'{rk[0]:%H:%M}–{rk[1]:%H:%M}</span></div>')
+        kopf = tag_kopf(d, tag, tz)
         slots = nach_tag.get(d, [])
         beste = sorted((f for f in fenster if f.von.date() == d),
                        key=lambda f: (-f.score, f.von))[:3]
@@ -385,43 +471,111 @@ def tage_html(p, kalender, fenster, protokoll) -> str:
             teile.append(f'<section class="tag">{kopf}<p class="leer">Kein Handel an diesem Tag.</p></section>')
             d += timedelta(days=1)
             continue
-        zellen, stunden = [], []
-        for t, bew in slots:
-            klasse, stil = slot_style(bew, p["min_i"])
-            if any(f.von <= t < f.bis for f in beste):
-                klasse += " top"
-            if bew.gesperrt:
-                tip = f"{t:%H:%M} gesperrt: {', '.join(bew.sperren)}"
-            else:
-                tip = f"{t:%H:%M} Score {bew.score}"
-            zellen.append(f'<div class="{klasse}" style="{stil}" title="{E(tip)}"></div>')
-            stunden.append(f'<div class="stunde">{t:%H}</div>' if t.minute == 0 else "<div></div>")
-        spalten = f"grid-template-columns:repeat({len(slots)},minmax(5px,1fr))"
-        leiste = (f'<div class="leiste-rahmen"><div class="leiste" style="{spalten}" role="img" '
-                  f'aria-label="Bewertung im Tagesverlauf">{"".join(zellen)}</div>'
-                  f'<div class="leiste" style="{spalten}">{"".join(stunden)}</div></div>')
+        leiste = leiste_html(p, slots, beste)
         if beste:
             items = []
             for f in sorted(beste, key=lambda f: f.von):
                 i = f.info
-                plus = "".join(f'<li class="plus">{E(t)} ({pkt:+d})</li>' if pkt > 0
-                               else f"<li>{E(t)} ({pkt:+d})</li>"
-                               for pkt, t in sorted(f.faktoren, key=lambda x: -x[0]))
-                link = "/abgleich?" + urllib.parse.urlencode(
-                    {"zeit": f"{f.von:%Y-%m-%d %H:%M}", "modus": p["modus"], **extra})
                 items.append(
                     f'<li><div class="zeile"><span class="zeit">{f.von:%H:%M}–{f.bis:%H:%M}</span>'
                     f'<span class="score">{f.sterne} Score {f.score}, {E(f.bewertung)}</span>'
                     f'<span class="merkmale">Horā {E(i["hora"])}, {E(i["nakshatra"])}, '
-                    f'Tārā {E(i["tara"])}, Lagna {E(i["lagna"])}</span></div>'
-                    f'<details><summary>Faktoren</summary><ul>{plus}</ul>'
-                    f'<p><a href="{E(link)}">Abgleich für {f.von:%H:%M}</a></p></details></li>')
+                    f'Tārā {E(i["tara"])}, Lagna {E(i["lagna"])}</span>'
+                    f'<a class="detail" href="{E(slot_url(p, f.von))}">Muhūrta-Chart</a></div>'
+                    f'<details><summary>Faktoren</summary><ul>{faktoren_liste(f.faktoren)}</ul></details></li>')
             liste = f'<ul class="fenster">{"".join(items)}</ul>'
         else:
             liste = '<p class="leer">Kein Zeitfenster erreicht den Mindestscore.</p>'
         teile.append(f'<section class="tag">{kopf}{leiste}{liste}</section>')
         d += timedelta(days=1)
     return "".join(teile)
+
+# ---------------------------------------------------------------------------
+# Muhūrta-Chart (SVG, Nord- und Südindisch) — nur Darstellung, Daten aus der Engine
+# ---------------------------------------------------------------------------
+
+KURZ = {"Ascendant": "La", "Sun": "So", "Moon": "Mo", "Mars": "Ma", "Mercury": "Me",
+        "Jupiter": "Ju", "Venus": "Ve", "Saturn": "Sa", "Rahu": "Ra", "Ketu": "Ke"}
+
+# Südindisch: Zeichen → (Zeile, Spalte), fest
+SUED_ZELLE = {11: (0, 0), 0: (0, 1), 1: (0, 2), 2: (0, 3), 10: (1, 0), 3: (1, 3),
+              9: (2, 0), 4: (2, 3), 8: (3, 0), 7: (3, 1), 6: (3, 2), 5: (3, 3)}
+
+# Nordindisch: Haus → Textmitte und Position der Zeichennummer (Feld 400×400)
+NORD_MITTE = {1: (200, 92), 2: (100, 34), 3: (38, 100), 4: (100, 200), 5: (38, 300),
+              6: (100, 362), 7: (200, 304), 8: (300, 362), 9: (362, 300), 10: (300, 200),
+              11: (362, 100), 12: (300, 34)}
+NORD_NUMMER = {1: (200, 182), 2: (100, 88), 3: (86, 104), 4: (180, 204), 5: (86, 304),
+               6: (100, 322), 7: (200, 226), 8: (300, 322), 9: (314, 304), 10: (220, 204),
+               11: (314, 104), 12: (300, 88)}
+
+RASHI_KURZ = ["Meṣa", "Vṛṣa", "Mith", "Karka", "Siṃha", "Kanyā",
+              "Tulā", "Vṛśc", "Dhanu", "Makara", "Kumbha", "Mīna"]
+
+
+def belegung(lons: dict, retro: dict) -> dict[int, list[tuple[str, str]]]:
+    """Zeichen → [(Beschriftung, Klasse)], Lagna zuerst."""
+    out: dict[int, list[tuple[str, str]]] = {}
+    for g in ["Ascendant"] + mt.GRAHAS:
+        l = lons[g]
+        r = "R" if retro.get(g) else ""
+        out.setdefault(int(l // 30) % 12, []).append(
+            (f"{KURZ[g]}{r} {int(l % 30)}°", "la" if g == "Ascendant" else "gr"))
+    return out
+
+
+def _texte(x: float, y: float, eintraege: list, zeilenhoehe: float = 15) -> str:
+    start = y - (len(eintraege) - 1) * zeilenhoehe / 2
+    return "".join(f'<text x="{x}" y="{start + i * zeilenhoehe:.1f}" class="{k}" '
+                   f'text-anchor="middle" dominant-baseline="middle">{E(txt)}</text>'
+                   for i, (txt, k) in enumerate(eintraege))
+
+
+def chart_sued(bel: dict, lagna: int, mitte: list[str]) -> str:
+    teile = ['<svg class="chart-svg sued" viewBox="0 0 400 400" role="img" '
+             'aria-label="Muhūrta-Chart südindisch">']
+    for zeichen, (r, c) in SUED_ZELLE.items():
+        x, y = c * 100, r * 100
+        teile.append(f'<rect x="{x}" y="{y}" width="100" height="100" class="feld"/>')
+        teile.append(f'<text x="{x + 6}" y="{y + 14}" class="zeichen">{E(RASHI_KURZ[zeichen])}</text>')
+        if zeichen == lagna:
+            teile.append(f'<line x1="{x + 78}" y1="{y}" x2="{x + 100}" y2="{y + 22}" class="lagna-strich"/>')
+        teile.append(_texte(x + 50, y + 58, bel.get(zeichen, [])))
+    teile.append('<rect x="100" y="100" width="200" height="200" class="mitte"/>')
+    teile.append(_texte(200, 200, [(z, "mitte-text") for z in mitte], 20))
+    teile.append("</svg>")
+    return "".join(teile)
+
+
+def chart_nord(bel: dict, lagna: int) -> str:
+    teile = ['<svg class="chart-svg nord" viewBox="0 0 400 400" role="img" '
+             'aria-label="Muhūrta-Chart nordindisch">',
+             '<rect x="0" y="0" width="400" height="400" class="feld"/>',
+             '<path d="M0 0L400 400M400 0L0 400M200 0L400 200L200 400L0 200Z" class="linie"/>']
+    for haus in range(1, 13):
+        zeichen = (lagna + haus - 1) % 12
+        nx, ny = NORD_NUMMER[haus]
+        teile.append(f'<text x="{nx}" y="{ny}" class="nummer" text-anchor="middle" '
+                     f'dominant-baseline="middle">{zeichen + 1}</text>')
+        mx, my = NORD_MITTE[haus]
+        teile.append(_texte(mx, my, bel.get(zeichen, []), 14))
+    teile.append("</svg>")
+    return "".join(teile)
+
+
+CHART_SKRIPT = """<script>
+(function(){
+  var box=document.querySelector('.chart');if(!box)return;
+  var stil='nord';try{stil=localStorage.getItem('muhurta_chart')||'nord';}catch(e){}
+  function setze(s){box.setAttribute('data-stil',s);
+    document.querySelectorAll('.chart-wahl button').forEach(function(b){
+      b.setAttribute('aria-pressed',b.dataset.stil===s?'true':'false');});
+    try{localStorage.setItem('muhurta_chart',s);}catch(e){}}
+  document.querySelectorAll('.chart-wahl button').forEach(function(b){
+    b.addEventListener('click',function(){setze(b.dataset.stil);});});
+  setze(stil);
+})();
+</script>"""
 
 
 def radix_html(p: dict, radix) -> str:
@@ -492,6 +646,154 @@ def start(request: Request):
     inhalt += radix_html(p, radix)
     inhalt += formular(p) + LEGENDE + tage_html(p, kalender, fenster, protokoll)
     return seite("Muhūrta für Trades", inhalt, p["h"]["label"])
+
+
+@app.get("/slot", response_class=HTMLResponse)
+def slot(request: Request):
+    """Muhūrta-Detail eines Zeitpunkts mit Chart, Pañcāṅga, Faktoren und Grahas."""
+    if not zugang_ok(request):
+        return RedirectResponse("/login", status_code=303)
+    q = request.query_params
+    p, fehler = parameter(q)
+    tz = ZoneInfo(p["h"]["iana"]) if "h" in p else ZoneInfo(TZ_NAME)
+    zeit = (q.get("zeit") or "").replace("T", " ")
+    try:
+        dt = datetime.strptime(zeit, "%Y-%m-%d %H:%M").replace(tzinfo=tz)
+    except ValueError:
+        fehler.append("Zeitpunkt im Format JJJJ-MM-TT HH:MM angeben.")
+    zurueck_von = dt.date().isoformat() if not fehler else p["von"]
+    zurueck = url("/", p, von=zurueck_von, tage="5")
+    kopf = f'<p class="radix"><a href="{E(zurueck)}">Zurück zur Übersicht</a></p>'
+    if fehler:
+        return seite("Muhūrta-Detail", kopf + '<div class="fehler">'
+                     + "".join(f"<p>{E(x)}</p>" for x in fehler) + "</div>")
+
+    g, h = p["g"], p["h"]
+    try:
+        radix = radix_cache(p["geburt"], g["lat"], g["lon"], g["offset"], g["label"])
+        kalender = mt.Tageskalender(h["lat"], h["lon"], tz)
+        jd = mt.jd_aus_dt(dt)
+        tag = kalender.fuer_jd(jd)
+        bew = mt.bewerten(jd, tag, radix, p["modus"], h["lat"], h["lon"])
+        try:
+            retro = mt.ae._retro_flags(jd)
+        except Exception:
+            retro = {}
+        # Tagesleiste zur Navigation
+        tag_start = datetime.combine(dt.date(), time(0, 0), tzinfo=tz)
+        tag_ende = datetime.combine(dt.date() + timedelta(days=1), time(0, 0), tzinfo=tz)
+        protokoll: list = []
+        fenster = mt.fenster_berechnen(tag_start, tag_ende, p["schritt_i"], radix, p["modus"],
+                                       p["markt"], p["min_i"], kalender, h["lat"], h["lon"],
+                                       protokoll)
+        ende_tithi = mt.element_ende(jd, mt._idx_tithi)
+        ende_nak = mt.element_ende(jd, mt._idx_nak)
+        ende_yoga = mt.element_ende(jd, mt._idx_yoga)
+        ende_karana = mt.element_ende(jd, mt._idx_karana)
+    except Exception as exc:
+        return seite("Muhūrta-Detail", kopf + f'<div class="fehler"><p>Berechnung fehlgeschlagen: '
+                     f'{E(str(exc))}</p></div>')
+
+    z = lambda x: f"{mt.dt_aus_jd(x, tz):%H:%M}"
+    ztag = lambda x: (f"{mt.dt_aus_jd(x, tz):%H:%M}" if mt.dt_aus_jd(x, tz).date() == dt.date()
+                      else f"{mt.dt_aus_jd(x, tz):%d.%m. %H:%M}")
+    lons = bew.lons
+    lagna = int(lons["Ascendant"] // 30) % 12
+    i = bew.info
+    schritt = timedelta(minutes=p["schritt_i"])
+    tag_d = mt.dt_aus_jd(tag.aufgang, tz).date()
+
+    # Status
+    if bew.gesperrt:
+        status = (f'<p class="status gesperrt-text">Gesperrt: {E(", ".join(bew.sperren))}. '
+                  f'Score ohne Sperre: {bew.score}.</p>')
+    else:
+        stufe = mt.Fenster(dt, dt + schritt, bew.score, bew.faktoren, i)
+        unter = "" if bew.score >= p["min_i"] else f" Unter dem Mindestscore {p['min_i']}."
+        status = (f'<p class="status"><span class="score">{stufe.sterne} Score {bew.score}, '
+                  f'{E(stufe.bewertung)}</span>{E(unter)}</p>')
+    if not mt.im_markt(dt, p["markt"]):
+        status += f'<p class="leer">Ausserhalb der Handelszeit von {E(MARKT_NAMEN[p["markt"]])}.</p>'
+
+    # Tagesleiste
+    beste = sorted(fenster, key=lambda f: (-f.score, f.von))[:3]
+    aktuell = next((t for t, _ in protokoll if t <= dt < t + schritt), None)
+    leiste = leiste_html(p, protokoll, beste, aktuell) if protokoll else ""
+
+    # Chart
+    bel = belegung(lons, retro)
+    mitte = ["Muhūrta", f"{dt:%d.%m.%Y}", f"{dt:%H:%M}", h["label"].split(",")[0]]
+    chart = (f'<div class="chart-wahl" role="group" aria-label="Chart-Stil">'
+             f'<button type="button" data-stil="nord" aria-pressed="true">Nordindisch</button>'
+             f'<button type="button" data-stil="sued" aria-pressed="false">Südindisch</button></div>'
+             f'<div class="chart" data-stil="nord">{chart_nord(bel, lagna)}'
+             f'{chart_sued(bel, lagna, mitte)}</div>')
+
+    # Pañcāṅga
+    hora_bis = ""
+    if not mt.HORA_PROPORTIONAL:
+        n = int((jd - tag.aufgang) * 24.0)
+        hora_bis = f", bis {z(tag.aufgang + (n + 1) / 24.0)}"
+    rk = tag.achtel_zeit(mt.RAHU_KALA[tag.wochentag])
+    yg = tag.achtel_zeit(mt.YAMAGANDA[tag.wochentag])
+    gk = tag.achtel_zeit(mt.GULIKA[tag.wochentag])
+    ab = tag.abhijit()
+    abh = " (mittwochs nicht verwendet)" if tag.wochentag == mt.MITTWOCH else ""
+    asc = lons["Ascendant"]
+    panchanga = f"""<dl class="panchanga">
+<dt>Tithi</dt><dd>{E(i['tithi'])}, bis {ztag(ende_tithi)}</dd>
+<dt>Vāra</dt><dd>{E(mt.VARA[tag.wochentag])} ({E(mt.WOCHENTAG[tag.wochentag])})</dd>
+<dt>Nakṣatra</dt><dd>{E(i['nakshatra'])}, bis {ztag(ende_nak)}</dd>
+<dt>Yoga</dt><dd>{E(i['yoga'])}, bis {ztag(ende_yoga)}</dd>
+<dt>Karaṇa</dt><dd>{E(i['karana'])}, bis {ztag(ende_karana)}</dd>
+<dt>Horā</dt><dd>{E(i['hora'])}{hora_bis}</dd>
+<dt>Muhūrta-Lagna</dt><dd>{E(mt.RASHI[lagna])} {int(asc % 30)}°{int((asc % 1) * 60):02d}′</dd>
+<dt>Tārā</dt><dd>{E(i['tara'])} (vom Janma-Nakṣatra {E(mt.NAKSHATRA[radix.mond_nak])})</dd>
+<dt>Candrabala</dt><dd>Mond im {E(i['chandrabala'])} vom Janma-Mond</dd>
+<dt>Sonne</dt><dd>Aufgang {z(tag.aufgang)} ({tag_d:%d.%m.}), Untergang {z(tag.untergang)}</dd>
+<dt>Rāhu Kāla</dt><dd>{z(rk[0])}–{z(rk[1])}</dd>
+<dt>Yamagaṇḍa</dt><dd>{z(yg[0])}–{z(yg[1])}</dd>
+<dt>Gulika Kāla</dt><dd>{z(gk[0])}–{z(gk[1])}</dd>
+<dt>Abhijit</dt><dd>{z(ab[0])}–{z(ab[1])}{abh}</dd>
+</dl>"""
+
+    # Grahas
+    zeilen = []
+    for gname in ["Ascendant"] + mt.GRAHAS:
+        l = lons[gname]
+        zeichen = int(l // 30) % 12
+        nak, _, pada = mt.ae.nakshatra_of(l)
+        r = " R" if retro.get(gname) else ""
+        h_muh = (zeichen - lagna) % 12 + 1
+        h_janma = (zeichen - radix.lagna_rashi) % 12 + 1
+        h_mond = (zeichen - radix.mond_rashi) % 12 + 1
+        zeilen.append(
+            f"<tr><td>{E(mt.PLANET_DE[gname])}{r}</td><td>{E(mt.RASHI[zeichen])}</td>"
+            f"<td>{int(l % 30)}°{int((l % 1) * 60):02d}′</td>"
+            f"<td>{E(mt.NAKSHATRA[mt.ae.nak_index(nak)])} {pada}</td>"
+            f"<td>{h_muh}</td><td>{h_janma}</td><td>{h_mond}</td></tr>")
+    grahas = ('<div class="tabelle"><table class="grahas"><thead><tr><th>Graha</th><th>Zeichen</th>'
+              '<th>Grad</th><th>Nakṣatra</th><th>Haus vom Muhūrta-Lagna</th>'
+              '<th>vom Janma-Lagna</th><th>vom Janma-Mond</th></tr></thead><tbody>'
+              + "".join(zeilen) + "</tbody></table></div>")
+
+    faktoren = (f'<ul class="faktoren">{faktoren_liste(bew.faktoren)}</ul>'
+                if bew.faktoren else '<p class="leer">Keine wertenden Faktoren.</p>')
+
+    vor = slot_url(p, dt - schritt)
+    nach = slot_url(p, dt + schritt)
+    roh = url("/abgleich", p, zeit=f"{dt:%Y-%m-%d %H:%M}")
+    navigation = (f'<nav class="navigation" aria-label="Zeitpunkt wechseln">'
+                  f'<a href="{E(vor)}">{(dt - schritt):%H:%M} früher</a>'
+                  f'<a href="{E(roh)}">Rohdaten zum Abgleich</a>'
+                  f'<a href="{E(nach)}">{(dt + schritt):%H:%M} später</a></nav>')
+
+    inhalt = (kopf + f'<h1>{E(datum_lang(dt.date(), wochentag_so0(dt.date())))}, {dt:%H:%M}</h1>'
+              + status + leiste
+              + f'<div class="detail-raster"><div>{chart}</div><div><h2>Pañcāṅga</h2>{panchanga}'
+              + f'<h2 class="abstand">Faktoren ({E(p["modus"])})</h2>{faktoren}</div></div>'
+              + f'<h2>Grahas</h2>{grahas}{navigation}{CHART_SKRIPT}')
+    return seite("Muhūrta-Detail", inhalt, h["label"])
 
 
 @app.get("/abgleich", response_class=HTMLResponse)

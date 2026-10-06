@@ -60,7 +60,7 @@ Build Ved Chart Calc nach `./engine` und schreibt den Engine-Commit in die Fussz
 3. Nach dem Deploy die Render-URL öffnen, Schlüssel eingeben (Cookie gilt 90 Tage).
 
 Engine geändert? In Render *Manual Deploy → Deploy latest commit* – der Build holt den
-aktuellen Stand von Ved Chart Calc. Routen: `/`, `/abgleich?zeit=JJJJ-MM-TT HH:MM`,
+aktuellen Stand von Ved Chart Calc. Routen: `/`, `/slot?zeit=JJJJ-MM-TT HH:MM` (Muhūrta-Detail mit Chart, per Klick in der Tagesleiste), `/abgleich?zeit=…`,
 `/api/fenster` (JSON, gleiche Parameter wie das Formular), `/health`.
 
 ## Lokal
