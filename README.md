@@ -36,11 +36,35 @@ Lauf frisch ausgecheckt – es gibt nur eine Rechenquelle.
    (mit Engine-Commit), CSV als Artefakt; zusätzlich jeden Montag automatisch.
    Mit Eingabe *abgleich* erscheinen statt der Fenster die Detailwerte zum Vergleich mit dem Report.
 
+## Web-App auf Render
+
+`app.py` stellt dasselbe als Web-App bereit: Formular, Tagesleiste mit Bewertung im
+15-Minuten-Raster, beste Fenster mit Faktoren und Abgleich-Link. `build.sh` klont beim
+Build Ved Chart Calc nach `./engine` und schreibt den Engine-Commit in die Fusszeile.
+
+1. Render → *New → Blueprint* → dieses Repository wählen. `render.yaml` legt den Dienst an.
+2. Beim Anlegen die Werte eintragen:
+
+   | Variable | Inhalt |
+   |---|---|
+   | `ENGINE_REPO` | `<github-name>/<ved-chart-calc-repo>` |
+   | `ENGINE_DIR` | Unterordner von `astro_engine.py`, sonst leer |
+   | `ENGINE_TOKEN` | nur bei privatem Ved Chart Calc (Fine-grained, *Contents: Read-only*) |
+   | `APP_KEY` | frei wählbarer Zugangsschlüssel – ohne ihn ist die App öffentlich |
+   | `GEBURT`, `GEBURT_LAT`, `GEBURT_LON` | Standard-Geburtsdaten wie oben |
+
+3. Nach dem Deploy die Render-URL öffnen, Schlüssel eingeben (Cookie gilt 90 Tage).
+
+Engine geändert? In Render *Manual Deploy → Deploy latest commit* – der Build holt den
+aktuellen Stand von Ved Chart Calc. Routen: `/`, `/abgleich?zeit=JJJJ-MM-TT HH:MM`,
+`/api/fenster` (JSON, gleiche Parameter wie das Formular), `/health`.
+
 ## Lokal
 
 ```bash
 git clone https://github.com/<github-name>/<ved-chart-calc-repo> engine
 pip install -r requirements.txt
+uvicorn app:app --reload              # Web-App auf http://127.0.0.1:8000
 python muhurta_trading.py --geburt "1957-08-24 13:55" --geburt-tz Europe/Zurich \
   --geburt-lat 47.4833 --geburt-lon 7.7356 --modus kauf --markt SIX --tage 7
 ```

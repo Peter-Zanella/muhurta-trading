@@ -463,7 +463,9 @@ def im_markt(dt: datetime, markt: str) -> bool:
 
 def fenster_berechnen(start: datetime, ende: datetime, schritt: int, radix: Radix,
                       modus: str, markt: str, min_score: int, kalender: Tageskalender,
-                      lat: float, lon: float) -> list[Fenster]:
+                      lat: float, lon: float,
+                      protokoll: list | None = None) -> list[Fenster]:
+    """Zeitfenster berechnen. Optional: protokoll erhält jedes bewertete (Zeit, Bewertung)."""
     fenster: list[Fenster] = []
     aktuell: Fenster | None = None
     delta = timedelta(minutes=schritt)
@@ -476,6 +478,8 @@ def fenster_berechnen(start: datetime, ende: datetime, schritt: int, radix: Radi
             continue
         jd = jd_aus_dt(t)
         bew = bewerten(jd, kalender.fuer_jd(jd), radix, modus, lat, lon)
+        if protokoll is not None:
+            protokoll.append((t, bew))
         if bew.gesperrt or bew.score < min_score:
             aktuell = None
         elif aktuell and aktuell.bis == t and aktuell.score == bew.score \
