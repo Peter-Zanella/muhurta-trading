@@ -28,9 +28,9 @@ Lauf frisch ausgecheckt – es gibt nur eine Rechenquelle.
    |---|---|
    | `ENGINE_TOKEN` | nur nötig, wenn Ved Chart Calc privat ist: Fine-grained Token, nur dieses Repo, *Contents: Read-only* |
    | `GEBURT` | `1957-08-24 13:55` |
-   | `GEBURT_TZ` | `Europe/Zurich` |
-   | `GEBURT_LAT` | `47.4833` |
-   | `GEBURT_LON` | `7.7356` |
+   | `GEBURT_ORT` | `Liestal, Schweiz` (Geocoding wie Ved Chart Calc) |
+
+   Alternativ statt `GEBURT_ORT`: `GEBURT_LAT`, `GEBURT_LON`, `GEBURT_TZ`.
 
 5. *Actions → Muhūrta Trading → Run workflow*. Tabelle in der Job-Zusammenfassung
    (mit Engine-Commit), CSV als Artefakt; zusätzlich jeden Montag automatisch.
@@ -51,7 +51,11 @@ Build Ved Chart Calc nach `./engine` und schreibt den Engine-Commit in die Fussz
    | `ENGINE_DIR` | Unterordner von `astro_engine.py`, sonst leer |
    | `ENGINE_TOKEN` | nur bei privatem Ved Chart Calc (Fine-grained, *Contents: Read-only*) |
    | `APP_KEY` | frei wählbarer Zugangsschlüssel – ohne ihn ist die App öffentlich |
-   | `GEBURT`, `GEBURT_LAT`, `GEBURT_LON` | Standard-Geburtsdaten wie oben |
+   | `GEBURT`, `GEBURT_ORT` | Standard-Geburtsdaten wie oben |
+   | `APP_ORT` | Standard-Handelsort, vorbelegt mit `Wädenswil, Schweiz` |
+
+   Geburtsort und Handelsort lassen sich in der App jederzeit als Ortsname ändern. Die App
+   zeigt den gefundenen Ort mit Koordinaten und UTC-Offset an, damit sich das Geocoding prüfen lässt.
 
 3. Nach dem Deploy die Render-URL öffnen, Schlüssel eingeben (Cookie gilt 90 Tage).
 
@@ -65,8 +69,8 @@ aktuellen Stand von Ved Chart Calc. Routen: `/`, `/abgleich?zeit=JJJJ-MM-TT HH:M
 git clone https://github.com/<github-name>/<ved-chart-calc-repo> engine
 pip install -r requirements.txt
 uvicorn app:app --reload              # Web-App auf http://127.0.0.1:8000
-python muhurta_trading.py --geburt "1957-08-24 13:55" --geburt-tz Europe/Zurich \
-  --geburt-lat 47.4833 --geburt-lon 7.7356 --modus kauf --markt SIX --tage 7
+python muhurta_trading.py --geburt "1957-08-24 13:55" --geburt-ort "Liestal, Schweiz" \
+  --modus kauf --markt SIX --tage 7
 ```
 
 Optionen: `--lat/--lon/--tz` (Handelsort, Standard Wädenswil), `--von`, `--tage`,

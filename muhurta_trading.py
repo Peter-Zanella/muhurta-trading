@@ -21,8 +21,11 @@ Aufruf:
 Abgleich (Detailwerte zum Vergleich mit Report / Prokerala / Kala):
   python muhurta_trading.py ... --abgleich "2026-10-07 14:45"
 
+Geburtsort als Name (Geocoding wie Ved Chart Calc):
+  python muhurta_trading.py --geburt "1957-08-24 13:55" --geburt-ort "Liestal, Schweiz"
+
 Geburtsdaten auch über Umgebungsvariablen (GitHub Secrets):
-  GEBURT, GEBURT_TZ, GEBURT_LAT, GEBURT_LON
+  GEBURT, GEBURT_ORT  oder  GEBURT, GEBURT_TZ, GEBURT_LAT, GEBURT_LON
 """
 
 from __future__ import annotations
@@ -261,14 +264,27 @@ class Radix:
         return {p for p, h in self.chart["lordships"].items() if 2 in h or 11 in h}
 
 
-def radix_berechnen(geburt: str, iana: str, lat: float, lon: float) -> Radix:
+def radix_berechnen(geburt: str, iana: str | None, lat: float, lon: float,
+                    offset: float | None = None, ort: str = "Geburtsort") -> Radix:
+    """Radix über astro_engine.generate_chart. Offset direkt oder aus IANA-Zeitzone."""
     dt = datetime.strptime(geburt, "%Y-%m-%d %H:%M")
-    offset = ae.hist_offset(iana, dt.year, dt.month, dt.day, dt.hour, dt.minute)
     if offset is None:
-        sys.exit(f"Zeitzone '{iana}' unbekannt.")
+        offset = ae.hist_offset(iana or "", dt.year, dt.month, dt.day, dt.hour, dt.minute)
+        if offset is None:
+            raise ValueError(f"Zeitzone «{iana}» unbekannt.")
     chart = ae.generate_chart(dt.year, dt.month, dt.day, dt.hour, dt.minute,
-                              lat, lon, offset, location="Geburtsort")
+                              lat, lon, offset, location=ort)
     return Radix(chart)
+
+
+def geburtsort_aufloesen(geburt: str, ort: str) -> dict:
+    """Ortsname → Koordinaten, Zeitzone und historischer UTC-Offset
+    (astro_engine.resolve_location, wie in Ved Chart Calc)."""
+    dt = datetime.strptime(geburt, "%Y-%m-%d %H:%M")
+    loc = ae.resolve_location(ort, dt.year, dt.month, dt.day, dt.hour, dt.minute)
+    if not loc:
+        raise ValueError(f"Ort «{ort}» nicht gefunden. Genauer angeben, z. B. «Liestal, Schweiz».")
+    return loc
 
 # ---------------------------------------------------------------------------
 # Bewertung eines Zeitpunkts
@@ -700,6 +716,8 @@ def _env(name: str, standard: str | None = None) -> str | None:
 def argumente() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Muhūrta-Zeitfenster für Trades nach Geburtshoroskop")
     p.add_argument("--geburt", default=_env("GEBURT"), help='Geburtszeit "JJJJ-MM-TT HH:MM"')
+    p.add_argument("--geburt-ort", default=_env("GEBURT_ORT"),
+                   help='Geburtsort als Name, z. B. "Liestal, Schweiz" (statt Koordinaten)')
     p.add_argument("--geburt-tz", default=_env("GEBURT_TZ", STANDARD_TZ), help="IANA-Zeitzone Geburtsort")
     p.add_argument("--geburt-lat", type=float, default=_env("GEBURT_LAT"), help="Breite Geburtsort")
     p.add_argument("--geburt-lon", type=float, default=_env("GEBURT_LON"), help="Länge Geburtsort (Ost +)")
@@ -718,16 +736,26 @@ def argumente() -> argparse.Namespace:
     p.add_argument("--abgleich", action="append", default=None, metavar='"JJJJ-MM-TT HH:MM"',
                    help="Detailwerte für Radix und Zeitpunkt ausgeben (mehrfach möglich)")
     a = p.parse_args()
-    if not a.geburt or a.geburt_lat is None or a.geburt_lon is None:
-        p.error("Geburtsdaten fehlen: --geburt, --geburt-lat, --geburt-lon "
-                "(oder GEBURT, GEBURT_LAT, GEBURT_LON)")
+    if not a.geburt or not (a.geburt_ort or (a.geburt_lat is not None and a.geburt_lon is not None)):
+        p.error("Geburtsdaten fehlen: --geburt und --geburt-ort "
+                "(oder --geburt-lat/--geburt-lon; Umgebung GEBURT, GEBURT_ORT)")
     return a
 
 
 def main() -> int:
     a = argumente()
     tz = ZoneInfo(a.tz)
-    radix = radix_berechnen(a.geburt, a.geburt_tz, a.geburt_lat, a.geburt_lon)
+    try:
+        if a.geburt_ort and (a.geburt_lat is None or a.geburt_lon is None):
+            loc = geburtsort_aufloesen(a.geburt, a.geburt_ort)
+            print(f"Geburtsort: {loc['label']} ({loc['lat']:.4f}, {loc['lon']:.4f}, "
+                  f"{loc['offset_str']})")
+            radix = radix_berechnen(a.geburt, loc["iana"], loc["lat"], loc["lon"],
+                                    offset=loc["offset"], ort=loc["label"])
+        else:
+            radix = radix_berechnen(a.geburt, a.geburt_tz, a.geburt_lat, a.geburt_lon)
+    except ValueError as exc:
+        sys.exit(str(exc))
     kalender = Tageskalender(a.lat, a.lon, tz)
 
     if a.abgleich is not None:

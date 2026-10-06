@@ -15,8 +15,9 @@ Routen:
 
 Umgebungsvariablen:
   APP_KEY                   Zugangsschlüssel (leer = offen)
-  GEBURT, GEBURT_TZ, GEBURT_LAT, GEBURT_LON   Standard-Geburtsdaten
-  APP_TZ, APP_LAT, APP_LON  Handelsort (Standard Wädenswil, Europe/Zurich)
+  GEBURT, GEBURT_ORT        Standard-Geburtsdaten (Ort als Name, Geocoding wie Ved Chart Calc)
+  GEBURT_LAT, GEBURT_LON, GEBURT_TZ   alternativ Koordinaten (nur wenn GEBURT_ORT leer)
+  APP_ORT                   Standard-Handelsort (Standard «Wädenswil, Schweiz»)
   ENGINE_DIR                Unterordner von astro_engine.py im Engine-Repo
 """
 
@@ -51,9 +52,8 @@ app = FastAPI(title="Muhūrta Trading", docs_url=None, redoc_url=None, openapi_u
 
 APP_KEY = os.environ.get("APP_KEY", "").strip()
 COOKIE = "muhurta_zugang"
-TZ_NAME = os.environ.get("APP_TZ", mt.STANDARD_TZ)
-ORT_LAT = float(os.environ.get("APP_LAT", mt.STANDARD_LAT))
-ORT_LON = float(os.environ.get("APP_LON", mt.STANDARD_LON))
+TZ_NAME = mt.STANDARD_TZ
+STANDARD_HANDELSORT = os.environ.get("APP_ORT", "").strip() or "Wädenswil, Schweiz"
 MAX_TAGE = 31
 
 try:
@@ -83,28 +83,66 @@ def zugang_ok(request: Request) -> bool:
     return hmac.compare_digest(request.cookies.get(COOKIE, ""), zugangs_token())
 
 
+@functools.lru_cache(maxsize=64)
+def geburtsort(geburt: str, gort: str, glat: str, glon: str, gtz: str) -> dict:
+    """Geburtsort auflösen. Ortsname hat Vorrang; Koordinaten nur bei leerem Ortsfeld."""
+    if gort:
+        return mt.geburtsort_aufloesen(geburt, gort)
+    lat, lon = float(glat), float(glon)
+    iana = gtz or mt.ae.iana_tz(lat, lon)
+    if not iana:
+        raise ValueError("Zeitzone für die Koordinaten nicht ermittelbar. Zeitzone eintragen, z. B. Europe/Zurich.")
+    dt = datetime.strptime(geburt, "%Y-%m-%d %H:%M")
+    offset = mt.ae.hist_offset(iana, dt.year, dt.month, dt.day, dt.hour, dt.minute)
+    if offset is None:
+        raise ValueError(f"Zeitzone «{iana}» unbekannt, z. B. Europe/Zurich.")
+    h, m = int(abs(offset)), int(round((abs(offset) % 1) * 60))
+    return {"lat": lat, "lon": lon, "iana": iana, "offset": offset, "approx": False,
+            "label": f"{lat:.4f}, {lon:.4f}",
+            "offset_str": f"UTC{'+' if offset >= 0 else '-'}{h:02d}:{m:02d}"}
+
+
+@functools.lru_cache(maxsize=64)
+def handelsort(name: str) -> dict:
+    g = mt.ae.geocode(name)
+    if not g:
+        raise ValueError(f"Handelsort «{name}» nicht gefunden. Genauer angeben, z. B. «Zürich, Schweiz».")
+    iana = g.get("iana") or mt.ae.iana_tz(g["lat"], g["lon"]) or TZ_NAME
+    try:
+        ZoneInfo(iana)
+    except Exception:
+        iana = TZ_NAME
+    return {"lat": g["lat"], "lon": g["lon"], "iana": iana, "label": g["label"]}
+
+
 @functools.lru_cache(maxsize=32)
-def radix_cache(geburt: str, gtz: str, lat: float, lon: float) -> mt.Radix:
-    return mt.radix_berechnen(geburt, gtz, lat, lon)
+def radix_cache(geburt: str, lat: float, lon: float, offset: float, ort: str) -> mt.Radix:
+    return mt.radix_berechnen(geburt, None, lat, lon, offset=offset, ort=ort)
 
 # ---------------------------------------------------------------------------
 # Parameter
 # ---------------------------------------------------------------------------
 
+def _wert(q, name: str, standard: str) -> str:
+    """Formularwert; ein abgeschicktes leeres Feld bleibt leer (überschreibt den Standard)."""
+    return q.get(name, "").strip() if name in q else standard
+
+
 def parameter(q) -> tuple[dict, list[str]]:
     fehler: list[str] = []
-    tz = ZoneInfo(TZ_NAME)
     p = {
         "modus": q.get("modus", "kauf"),
         "markt": q.get("markt", "SIX"),
-        "von": q.get("von") or datetime.now(tz).date().isoformat(),
+        "von": q.get("von") or datetime.now(ZoneInfo(TZ_NAME)).date().isoformat(),
         "tage": q.get("tage", "5"),
         "schritt": q.get("schritt", "15"),
         "min": q.get("min", "5"),
-        "geburt": (q.get("geburt") or _env("GEBURT")).replace("T", " "),
-        "gtz": q.get("gtz") or _env("GEBURT_TZ", mt.STANDARD_TZ),
-        "glat": q.get("glat") or _env("GEBURT_LAT"),
-        "glon": q.get("glon") or _env("GEBURT_LON"),
+        "hort": _wert(q, "hort", STANDARD_HANDELSORT) or STANDARD_HANDELSORT,
+        "geburt": _wert(q, "geburt", _env("GEBURT")).replace("T", " "),
+        "gort": _wert(q, "gort", _env("GEBURT_ORT")),
+        "glat": _wert(q, "glat", "" if _env("GEBURT_ORT") else _env("GEBURT_LAT")),
+        "glon": _wert(q, "glon", "" if _env("GEBURT_ORT") else _env("GEBURT_LON")),
+        "gtz": _wert(q, "gtz", "" if _env("GEBURT_ORT") else _env("GEBURT_TZ")),
     }
     if p["modus"] not in ("kauf", "verkauf"):
         fehler.append("Modus muss «kauf» oder «verkauf» sein.")
@@ -128,41 +166,58 @@ def parameter(q) -> tuple[dict, list[str]]:
         p["min_i"] = int(p["min"])
     except ValueError:
         fehler.append("Mindestscore als ganze Zahl angeben.")
-    if not p["geburt"] or not p["glat"] or not p["glon"]:
-        fehler.append("Geburtsdaten fehlen. Unter «Geburtsdaten» Zeit, Breite und Länge eintragen.")
+
+    geburt_ok = False
+    if not p["geburt"]:
+        fehler.append("Geburtszeit fehlt. Unter «Geburtsdaten» eintragen.")
     else:
         try:
             datetime.strptime(p["geburt"], "%Y-%m-%d %H:%M")
+            geburt_ok = True
         except ValueError:
             fehler.append("Geburtszeit im Format JJJJ-MM-TT HH:MM angeben.")
+    if not p["gort"]:
+        if not (p["glat"] and p["glon"]):
+            fehler.append("Geburtsort fehlt. Unter «Geburtsdaten» den Ort eintragen, z. B. «Liestal, Schweiz».")
+            geburt_ok = False
+        else:
+            try:
+                float(p["glat"]), float(p["glon"])
+            except ValueError:
+                fehler.append("Breite und Länge als Dezimalzahl angeben (Ost positiv).")
+                geburt_ok = False
+
+    if geburt_ok:
         try:
-            p["glat_f"], p["glon_f"] = float(p["glat"]), float(p["glon"])
-        except ValueError:
-            fehler.append("Breite und Länge des Geburtsorts als Dezimalzahl angeben (Ost positiv).")
-        try:
-            ZoneInfo(p["gtz"])
-        except Exception:
-            fehler.append(f"Zeitzone «{p['gtz']}» unbekannt, z. B. Europe/Zurich.")
+            p["g"] = geburtsort(p["geburt"], p["gort"], p["glat"], p["glon"], p["gtz"])
+        except ValueError as exc:
+            fehler.append(str(exc))
+    try:
+        p["h"] = handelsort(p["hort"])
+    except ValueError as exc:
+        fehler.append(str(exc))
     return p, fehler
 
 
+FORMFELDER = ("hort", "geburt", "gort", "glat", "glon", "gtz")
+
+
 def geburt_query(p: dict) -> dict:
-    """Geburtsdaten nur in Links mitgeben, wenn sie von den Standardwerten abweichen."""
-    std = (_env("GEBURT"), _env("GEBURT_TZ", mt.STANDARD_TZ), _env("GEBURT_LAT"), _env("GEBURT_LON"))
-    if (p["geburt"], p["gtz"], p["glat"], p["glon"]) == std:
-        return {}
-    return {"geburt": p["geburt"], "gtz": p["gtz"], "glat": p["glat"], "glon": p["glon"]}
+    """Orts- und Geburtsfelder in Links nur mitgeben, wenn sie vom Standard abweichen."""
+    std, _ = parameter({})
+    return {k: p[k] for k in FORMFELDER if p.get(k, "") != std.get(k, "")}
 
 
 def berechnen(p: dict):
-    tz = ZoneInfo(TZ_NAME)
-    radix = radix_cache(p["geburt"], p["gtz"], p["glat_f"], p["glon_f"])
-    kalender = mt.Tageskalender(ORT_LAT, ORT_LON, tz)
+    g, h = p["g"], p["h"]
+    tz = ZoneInfo(h["iana"])
+    radix = radix_cache(p["geburt"], g["lat"], g["lon"], g["offset"], g["label"])
+    kalender = mt.Tageskalender(h["lat"], h["lon"], tz)
     start = datetime.combine(p["von_d"], time(0, 0), tzinfo=tz)
     ende = datetime.combine(p["von_d"] + timedelta(days=p["tage_i"]), time(0, 0), tzinfo=tz)
     protokoll: list = []
     fenster = mt.fenster_berechnen(start, ende, p["schritt_i"], radix, p["modus"], p["markt"],
-                                   p["min_i"], kalender, ORT_LAT, ORT_LON, protokoll)
+                                   p["min_i"], kalender, h["lat"], h["lon"], protokoll)
     return radix, kalender, fenster, protokoll
 
 # ---------------------------------------------------------------------------
@@ -179,7 +234,7 @@ CSS = """
   box-sizing:border-box;
   padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
 }
-*,*::before,*::after{box-sizing:inherit}
+*,*::before,*::after{box-sizing:border-box}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{margin:0;background:var(--nacht);color:var(--text);
   font:400 16px/1.55 "Work Sans",system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -203,9 +258,13 @@ input[type=number]{width:5.5rem}
 .modus input:focus-visible+span{outline:2px solid var(--text);outline-offset:-3px}
 button{background:var(--kurkuma);color:#1b1404;border:0;border-radius:6px;padding:10px 18px;
   font:500 .95rem "Work Sans",system-ui,sans-serif;cursor:pointer}
-details.geburt{flex-basis:100%;color:var(--leise);font-size:.9rem}
+details.geburt{flex-basis:100%;min-width:0;color:var(--leise);font-size:.9rem}
 details.geburt summary{cursor:pointer}
 details.geburt .felder{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px}
+details.koordinaten{margin-top:12px}
+label.ort{flex:1 1 220px;min-width:0;max-width:100%}
+label.ort input{width:100%}
+.hinweis{color:#e8c27a}
 .fehler{background:#3a1f2a;border:1px solid #7a3a4c;border-radius:8px;padding:12px 16px;margin-bottom:24px}
 .fehler p{margin:4px 0}
 .legende{display:flex;flex-wrap:wrap;gap:16px;font-size:.85rem;color:var(--leise);margin:0 0 20px}
@@ -244,9 +303,10 @@ KOPF = """<!doctype html><html lang="de"><head><meta charset="utf-8">
 <style>{css}</style></head><body><main class="seite">"""
 
 
-def seite(titel: str, inhalt: str) -> HTMLResponse:
+def seite(titel: str, inhalt: str, ort: str = "") -> HTMLResponse:
+    ort_text = f"Handelsort {E(ort)}. " if ort else ""
     fuss = (f"<footer>Rechenquelle: astro_engine.py (Ved Chart Calc, Commit {E(ENGINE_COMMIT)}). "
-            "Handelsort Wädenswil. Astrologische Auswertung, keine Anlageberatung.</footer>")
+            f"{ort_text}Astrologische Auswertung, keine Anlageberatung.</footer>")
     return HTMLResponse(KOPF.format(titel=E(titel), css=CSS) + inhalt + fuss + "</main></body></html>")
 
 
@@ -272,7 +332,8 @@ def formular(p: dict) -> str:
         f'<label class="radio"><input type="radio" name="modus" value="{w}"'
         f'{" checked" if p["modus"] == w else ""}><span>{t}</span></label>'
         for w, t in (("kauf", "Kauf"), ("verkauf", "Verkauf")))
-    offen = " open" if not (p["geburt"] and p["glat"] and p["glon"]) else ""
+    offen = " open" if not (p["geburt"] and (p["gort"] or (p["glat"] and p["glon"]))) else ""
+    koord_offen = " open" if (not p["gort"] and p["glat"]) else ""
     geburt_wert = p["geburt"].replace(" ", "T") if p["geburt"] else ""
     return f"""
 <form class="steuerung" method="get" action="/">
@@ -283,20 +344,26 @@ def formular(p: dict) -> str:
   <label>Tage<input type="number" name="tage" min="1" max="{MAX_TAGE}" value="{E(str(p['tage']))}"></label>
   <label>Raster<select name="schritt">{schritte}</select></label>
   <label>Mindestscore<input type="number" name="min" value="{E(str(p['min']))}"></label>
+  <label class="ort">Handelsort<input name="hort" value="{E(p['hort'])}" placeholder="z. B. Zürich, Schweiz"></label>
   <button type="submit">Zeitfenster berechnen</button>
   <details class="geburt"{offen}><summary>Geburtsdaten</summary>
     <div class="felder">
       <label>Geburtszeit (Ortszeit)<input type="datetime-local" name="geburt" value="{E(geburt_wert)}"></label>
-      <label>Zeitzone<input name="gtz" value="{E(p['gtz'])}"></label>
-      <label>Breite<input name="glat" inputmode="decimal" value="{E(p['glat'])}"></label>
-      <label>Länge (Ost +)<input name="glon" inputmode="decimal" value="{E(p['glon'])}"></label>
+      <label class="ort">Geburtsort<input name="gort" value="{E(p['gort'])}" placeholder="z. B. Liestal, Schweiz"></label>
     </div>
+    <details class="koordinaten"{koord_offen}><summary>Koordinaten statt Ort (nur bei leerem Geburtsort)</summary>
+      <div class="felder">
+        <label>Breite<input name="glat" inputmode="decimal" value="{E(p['glat'])}"></label>
+        <label>Länge (Ost +)<input name="glon" inputmode="decimal" value="{E(p['glon'])}"></label>
+        <label>Zeitzone<input name="gtz" value="{E(p['gtz'])}" placeholder="automatisch"></label>
+      </div>
+    </details>
   </details>
 </form>"""
 
 
 def tage_html(p, kalender, fenster, protokoll) -> str:
-    tz = ZoneInfo(TZ_NAME)
+    tz = kalender.tz
     nach_tag: dict[date, list] = {}
     for t, bew in protokoll:
         nach_tag.setdefault(t.date(), []).append((t, bew))
@@ -357,6 +424,19 @@ def tage_html(p, kalender, fenster, protokoll) -> str:
     return "".join(teile)
 
 
+def radix_html(p: dict, radix) -> str:
+    g, h = p["g"], p["h"]
+    herren = ", ".join(sorted(mt.PLANET_DE[x] for x in radix.wohlstandsherren))
+    geschaetzt = (' <span class="hinweis">Zeitzone nur geschätzt – Koordinaten und '
+                  'Zeitzone manuell eintragen.</span>') if g.get("approx") else ""
+    return (f'<p class="radix">Mond in <strong>{E(mt.RASHI[radix.mond_rashi])}</strong>, '
+            f'Nakṣatra <strong>{E(mt.NAKSHATRA[radix.mond_nak])}</strong>, Lagna '
+            f'<strong>{E(mt.RASHI[radix.lagna_rashi])}</strong>. Herren von 2. und 11. Haus: '
+            f'{E(herren)}.<br>Geburtsort {E(g["label"])} ({g["lat"]:.4f}, {g["lon"]:.4f}, '
+            f'{E(g["offset_str"])}).{geschaetzt} Handelsort {E(h["label"])} '
+            f'({h["lat"]:.4f}, {h["lon"]:.4f}, {E(h["iana"])}).</p>')
+
+
 LEGENDE = """<div class="legende">
 <span><i style="background:rgba(227,165,49,1)"></i>hoher Score</span>
 <span><i style="background:rgba(227,165,49,.4)"></i>knapp über Mindestscore</span>
@@ -409,13 +489,9 @@ def start(request: Request):
     except Exception as exc:  # Engine-/Eingabefehler sichtbar machen
         inhalt += formular(p) + f'<div class="fehler"><p>Berechnung fehlgeschlagen: {E(str(exc))}</p></div>'
         return seite("Muhūrta für Trades", inhalt)
-    herren = ", ".join(sorted(mt.PLANET_DE[x] for x in radix.wohlstandsherren))
-    inhalt += (f'<p class="radix">Mond in <strong>{E(mt.RASHI[radix.mond_rashi])}</strong>, '
-               f'Nakṣatra <strong>{E(mt.NAKSHATRA[radix.mond_nak])}</strong>, Lagna '
-               f'<strong>{E(mt.RASHI[radix.lagna_rashi])}</strong>. Herren von 2. und 11. Haus: '
-               f'{E(herren)}.</p>')
+    inhalt += radix_html(p, radix)
     inhalt += formular(p) + LEGENDE + tage_html(p, kalender, fenster, protokoll)
-    return seite("Muhūrta für Trades", inhalt)
+    return seite("Muhūrta für Trades", inhalt, p["h"]["label"])
 
 
 @app.get("/abgleich", response_class=HTMLResponse)
@@ -425,8 +501,9 @@ def abgleich(request: Request):
     q = request.query_params
     p, fehler = parameter(q)
     zeit = (q.get("zeit") or "").replace("T", " ")
+    tz = ZoneInfo(p["h"]["iana"]) if "h" in p else ZoneInfo(TZ_NAME)
     try:
-        dt = datetime.strptime(zeit, "%Y-%m-%d %H:%M").replace(tzinfo=ZoneInfo(TZ_NAME))
+        dt = datetime.strptime(zeit, "%Y-%m-%d %H:%M").replace(tzinfo=tz)
     except ValueError:
         fehler.append("Zeitpunkt im Format JJJJ-MM-TT HH:MM angeben.")
     zurueck = "/?" + urllib.parse.urlencode({"modus": p["modus"], **geburt_query(p)})
@@ -436,14 +513,16 @@ def abgleich(request: Request):
                      + "".join(f"<p>{E(x)}</p>" for x in fehler) + "</div>")
     puffer = io.StringIO()
     try:
-        radix = radix_cache(p["geburt"], p["gtz"], p["glat_f"], p["glon_f"])
-        kalender = mt.Tageskalender(ORT_LAT, ORT_LON, ZoneInfo(TZ_NAME))
+        g, h = p["g"], p["h"]
+        radix = radix_cache(p["geburt"], g["lat"], g["lon"], g["offset"], g["label"])
+        kalender = mt.Tageskalender(h["lat"], h["lon"], tz)
         with contextlib.redirect_stdout(puffer):
             mt.abgleich_radix(radix)
-            mt.abgleich_zeitpunkt(dt, radix, p["modus"], ORT_LAT, ORT_LON, kalender, ZoneInfo(TZ_NAME))
+            mt.abgleich_zeitpunkt(dt, radix, p["modus"], h["lat"], h["lon"], kalender, tz)
     except Exception as exc:
         return seite("Abgleich", kopf + f'<div class="fehler"><p>Berechnung fehlgeschlagen: {E(str(exc))}</p></div>')
-    return seite("Abgleich", kopf + f"<pre>{E(puffer.getvalue())}</pre>")
+    return seite("Abgleich", kopf + radix_html(p, radix) + f"<pre>{E(puffer.getvalue())}</pre>",
+                 p["h"]["label"])
 
 
 @app.get("/api/fenster")
@@ -458,6 +537,8 @@ def api_fenster(request: Request):
         "radix": {"mond_rashi": mt.RASHI[radix.mond_rashi],
                   "nakshatra": mt.NAKSHATRA[radix.mond_nak],
                   "lagna": mt.RASHI[radix.lagna_rashi]},
+        "geburtsort": {k: p["g"][k] for k in ("label", "lat", "lon", "iana", "offset_str")},
+        "handelsort": p["h"],
         "engine": ENGINE_COMMIT,
         "fenster": [{"von": f.von.isoformat(), "bis": f.bis.isoformat(), "score": f.score,
                      "bewertung": f.bewertung, **f.info,

@@ -22,9 +22,7 @@ services:
         sync: false
       - key: GEBURT
         sync: false
-      - key: GEBURT_TZ
-        value: Europe/Zurich
-      - key: GEBURT_LAT
+      - key: GEBURT_ORT
         sync: false
-      - key: GEBURT_LON
-        sync: false
+      - key: APP_ORT
+        value: Wädenswil, Schweiz

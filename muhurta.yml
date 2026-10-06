@@ -52,6 +52,7 @@ jobs:
         env:
           ASTRO_ENGINE_PATH: ${{ github.workspace }}/engine/${{ vars.ENGINE_DIR }}
           GEBURT: ${{ secrets.GEBURT }}
+          GEBURT_ORT: ${{ secrets.GEBURT_ORT }}
           GEBURT_TZ: ${{ secrets.GEBURT_TZ }}
           GEBURT_LAT: ${{ secrets.GEBURT_LAT }}
           GEBURT_LON: ${{ secrets.GEBURT_LON }}
