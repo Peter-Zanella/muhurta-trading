@@ -325,6 +325,14 @@ table.grahas{border-collapse:collapse;width:100%;font-size:.9rem}
 table.grahas th,table.grahas td{text-align:left;padding:7px 12px 7px 0;border-bottom:1px solid var(--linie);white-space:nowrap}
 table.grahas th{color:var(--leise);font-weight:400}
 .navigation{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:28px}
+details.phase{border:1px solid var(--linie);border-left:4px solid var(--leise);border-radius:8px;
+  padding:10px 14px;margin:0 0 20px;background:var(--tafel)}
+details.phase.gut{border-left-color:#7fbf8f}
+details.phase.mittel{border-left-color:var(--kurkuma)}
+details.phase.vorsicht{border-left-color:#e79aa9}
+details.phase summary{cursor:pointer}
+details.phase ul{margin:8px 0 0;padding-left:18px;color:var(--leise)}
+.leise{color:var(--leise);font-size:.88rem}
 @media (max-width:760px){.detail-raster{grid-template-columns:1fr}}
 @media (max-width:600px){h1{font-size:1.9rem}.seite{padding:20px 14px 40px}}
 """
@@ -591,6 +599,16 @@ def radix_html(p: dict, radix) -> str:
             f'({h["lat"]:.4f}, {h["lon"]:.4f}, {E(h["iana"])}).</p>')
 
 
+def phase_html(ph: dict, titel: str) -> str:
+    klasse = "gut" if ph["summe"] >= 3 else "vorsicht" if ph["summe"] <= -2 else "mittel"
+    punkte = "".join(f'<li class="{"plus" if pk > 0 else ""}">{E(t)} ({pk:+d})</li>'
+                     for pk, t in ph["zeilen"])
+    return (f'<details class="phase {klasse}"><summary><strong>Phase: {E(ph["urteil"])}</strong> '
+            f'({ph["summe"]:+d}) <span class="leise">{E(titel)}</span></summary>'
+            f'<ul>{punkte}</ul><p class="leise">Daśā und Transit gelten für den ganzen Zeitraum gleich '
+            f'und fliessen deshalb nicht in den Score der Zeitpunkte ein.</p></details>')
+
+
 LEGENDE = """<div class="legende">
 <span><i style="background:rgba(227,165,49,1)"></i>hoher Score</span>
 <span><i style="background:rgba(227,165,49,.4)"></i>knapp über Mindestscore</span>
@@ -644,6 +662,11 @@ def start(request: Request):
         inhalt += formular(p) + f'<div class="fehler"><p>Berechnung fehlgeschlagen: {E(str(exc))}</p></div>'
         return seite("Muhūrta für Trades", inhalt)
     inhalt += radix_html(p, radix)
+    h = p["h"]
+    ph = mt.phase_bewerten(radix, mt.jd_aus_dt(datetime.combine(p["von_d"], time(12, 0),
+                                                                tzinfo=kalender.tz)),
+                           h["lat"], h["lon"])
+    inhalt += phase_html(ph, f"Daśā Stand heute, Transit am {p['von_d']:%d.%m.%Y}")
     inhalt += formular(p) + LEGENDE + tage_html(p, kalender, fenster, protokoll)
     return seite("Muhūrta für Trades", inhalt, p["h"]["label"])
 
@@ -789,7 +812,10 @@ def slot(request: Request):
                   f'<a href="{E(nach)}">{(dt + schritt):%H:%M} später</a></nav>')
 
     inhalt = (kopf + f'<h1>{E(datum_lang(dt.date(), wochentag_so0(dt.date())))}, {dt:%H:%M}</h1>'
-              + status + leiste
+              + status
+              + phase_html(mt.phase_bewerten(radix, jd, h["lat"], h["lon"]),
+                           f"Daśā Stand heute, Transit am {dt:%d.%m.%Y}")
+              + leiste
               + f'<div class="detail-raster"><div>{chart}</div><div><h2>Pañcāṅga</h2>{panchanga}'
               + f'<h2 class="abstand">Faktoren ({E(p["modus"])})</h2>{faktoren}</div></div>'
               + f'<h2>Grahas</h2>{grahas}{navigation}{CHART_SKRIPT}')

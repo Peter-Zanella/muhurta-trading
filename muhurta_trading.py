@@ -111,17 +111,32 @@ GULIKA = [7, 6, 5, 4, 3, 2, 1]
 MITTWOCH = 3
 
 # ---------------------------------------------------------------------------
-# Bewertungsregeln (Punkte)
+# Bewertungsregeln (Punkte) — Trading-Regelwerk
+#   Schwerpunkte: Merkur, Mond, 2./5./11. Haus, Lagna und Lagna-Herr
+#   Klassische Basis: Muhūrta Cintāmaṇi (Kraya/Vikraya), Pañcāṅga, Tārā/Candrabala
 # ---------------------------------------------------------------------------
 
-# Muhūrta Cintāmaṇi: günstig für Kauf / Verkauf
-NAK_KAUF = {0, 13, 14, 21, 23, 26}         # Aśvinī, Citrā, Svātī, Śravaṇa, Śatabhiṣā, Revatī
-NAK_VERKAUF = {1, 2, 8, 10, 19, 24}        # Bharaṇī, Kṛttikā, Āśleṣā, die drei Pūrvas
+# Nakṣatras für Trading (beide Modi)
+NAK_TRADING = {0, 4, 6, 12, 13, 14, 16, 21, 22, 26}
+#   Aśvinī, Mṛgaśirā, Punarvasu, Hasta, Citrā, Svātī, Anurādhā, Śravaṇa, Dhaniṣṭhā, Revatī
+SVATI = 14
+# Muhūrta Cintāmaṇi: Kauf (kraya) / Verkauf (vikraya)
+NAK_KAUF_MC = {0, 13, 14, 21, 23, 26}       # Aśvinī, Citrā, Svātī, Śravaṇa, Śatabhiṣā, Revatī
+NAK_VERKAUF_MC = {1, 2, 8, 10, 19, 24}      # Bharaṇī, Kṛttikā, Āśleṣā, die drei Pūrvas
+P_NAK_TRADING = 3
+P_NAK_MC = 2                                # MC-Nakṣatra des Modus (sofern nicht schon Trading-Nakṣatra)
+P_NAK_KAUF_VERBOTEN = -2                    # Kauf in einem Vikraya-Nakṣatra
 
 GUTE_TITHI = {2, 3, 5, 7, 10, 11, 13}      # Pakṣa-Tithi
 RIKTA_TITHI = {4, 9, 14}
 
-VARA_PUNKTE = [0, 0, -2, 2, 2, 1, -1]      # So, Mo, Di, Mi, Do, Fr, Sa
+# Vāra: Mittwoch am besten, dann Donnerstag, Freitag; Dienstag/Samstag meiden
+VARA_PUNKTE = [0, 0, -2, 3, 2, 1, -2]       # So, Mo, Di, Mi, Do, Fr, Sa
+
+# Dagdha-Tithi je Vāra (Pakṣa-Tithi) und Amṛta-Siddhi (Vāra + Nakṣatra)
+DAGDHA_TITHI = [12, 11, 5, 3, 6, 8, 9]       # So … Sa
+AMRITA_SIDDHI = [12, 4, 0, 16, 7, 26, 3]     # So Hasta, Mo Mṛgaśirā, Di Aśvinī, Mi Anurādhā,
+                                             # Do Puṣya, Fr Revatī, Sa Rohiṇī
 
 YOGA_SPERRE = {16, 26}                      # Vyatīpāta, Vaidhṛti
 YOGA_UNGUENSTIG = {0, 5, 8, 9, 12, 14, 18}  # Viṣkambha, Atigaṇḍa, Śūla, Gaṇḍa, Vyāghāta, Vajra, Parigha
@@ -136,21 +151,70 @@ CHANDRA_SCHLECHT = {4, 12}
 HORA_PUNKTE = {"Mercury": 3, "Jupiter": 2, "Venus": 2, "Moon": 1,
                "Sun": 0, "Mars": -2, "Saturn": -2}
 
+# Durmuhūrta (15 Muhūrtas je Tag-/Nachtbogen), Index 0 = Sonntag
+DURMUHURTA_TAG = [{14}, {9, 12}, {4}, {8}, {6, 12}, {4, 9}, {1, 2}]
+DURMUHURTA_NACHT = [set(), set(), {7}, set(), set(), set(), set()]
+P_YAMAGANDA = -3
+P_GULIKA = -2
+P_KALA_VELA = -2
+
 WOHLTAETER = {"Mercury", "Jupiter", "Venus"}
-
-# Schutz von 2. Haus (Finanzen, Dhana) und 5. Haus (Spekulation) vom Muhūrta-Lagna
 UEBELTAETER = {"Sun", "Mars", "Saturn", "Rahu", "Ketu"}
-GESCHUETZTE_HAEUSER = {2: "2. Haus (Finanzen)", 5: "5. Haus (Spekulation)"}
-HAUS_UEBEL_BESETZT = -2        # Mars, Saturn, Rāhu, Ketu im Haus
-HAUS_SONNE_BESETZT = -1        # Sonne allein im Haus (milder Übeltäter)
-HAUS_UEBEL_ASPEKT = -1         # Graha-Dṛṣṭi eines Übeltäters (engine: graha_aspects_by_sign)
-HAUS_HERR_DUSTHANA = -1        # Hausherr im 6./8./12. vom Muhūrta-Lagna
-HAUS_REIN = 1                  # weder besetzt noch aspektiert, Herr gut gestellt
+HARTE_UEBELTAETER = {"Mars", "Saturn", "Rahu", "Ketu"}
+KENDRA_TRIKONA = {1, 4, 5, 7, 9, 10}
+DUSTHANA = {6, 8, 12}
 
-# Muhūrta-Lagna selbst soll frei von Übeltätern sein
-LAGNA_UEBEL_BESETZT = -3       # Mars, Saturn, Rāhu oder Ketu im Lagna
-LAGNA_SONNE_BESETZT = -1       # nur Sonne im Lagna
-LAGNA_UEBEL_SPERRE = True      # True = Übeltäter (ohne Sonne) im Lagna sperrt den Zeitpunkt
+# Lagna: keine Übeltäter; Lagna-Herr stark
+LAGNA_UEBEL_SPERRE = True      # Mars/Saturn/Rāhu/Ketu im Lagna sperrt
+LAGNA_UEBEL_BESETZT = -3       # falls Sperre ausgeschaltet
+LAGNA_SONNE_BESETZT = -1
+
+# Merkur (Handel): Häuser vom Muhūrta-Lagna
+MERKUR_GUTE_HAEUSER = {1, 2, 5, 10, 11}
+P_MERKUR_GUT = 2
+P_MERKUR_DUSTHANA = -2
+P_MERKUR_RETRO = -2
+P_MERKUR_VERBRANNT = -2
+P_MERKUR_UEBEL_KONJ = -1
+P_MERKUR_RADIX_8 = -1          # Zusatz, wenn Merkur im Radix das 8. Haus beherrscht
+P_SVATI_MERKUR = 1             # Svātī mit sauberem Merkur
+
+# Mond
+P_SUKLA_KAUF = 1               # zunehmender Mond nur beim Kauf belohnt
+P_MOND_6_12 = -2               # Mond im 6./12. vom Muhūrta-Lagna (8. = Sperre)
+P_MOND_KNOTEN = -3             # Mond nahe Rāhu/Ketu
+MOND_KNOTEN_ORB = 8.0
+
+# 2. und 5. Haus geschützt
+GESCHUETZTE_HAEUSER = {2: "2. Haus (Kapital)", 5: "5. Haus (Spekulation)"}
+HAUS_UEBEL_BESETZT = -2
+HAUS_SONNE_BESETZT = -1
+HAUS_UEBEL_ASPEKT = -1
+HAUS_HERR_DUSTHANA = -1
+HAUS_REIN = 1
+P_RAHU_5_SCHWACH = -3          # Rāhu im 5. bei schwachem 5. Herrn (Gier, Übertreibung)
+P_RAHU_5_KONTROLLIERT = -1     # Rāhu im 5. bei gut gestelltem 5. Herrn
+
+# 11. Haus (Gewinne) stark — beim Verkauf doppelt gewichtet
+P_11_HERR_GUT = 1
+P_11_HERR_DUSTHANA = -2
+P_11_WOHLTAETER = 1
+P_11_RAHU = 1
+
+# Jupiter / Venus
+P_JUPITER_IN = 2               # Jupiter im 2./5./9./11.
+P_JUPITER_ASPEKT = 1           # Jupiter aspektiert 2./5./9./11.
+P_VENUS_2_11 = 1
+
+# Lagna-Herr
+P_LAGNAHERR_GUT = 1            # in Kendra/Trikoṇa oder 11.
+P_LAGNAHERR_DUSTHANA = -2
+P_LAGNAHERR_UEBEL_KONJ = -1
+P_LAGNAHERR_VERBRANNT = -1
+
+# Radix-Schlüsselplaneten (Herren von Janma-Lagna und 5. Haus) im Muhūrta
+P_RADIXHERR_GUT = 1
+P_RADIXHERR_DUSTHANA = -1
 
 # Handelszeiten: (Zeitzone, Öffnung, Schluss, nur Werktage)
 MAERKTE = {
@@ -209,6 +273,17 @@ class Tag:
     def ist_abhijit(self, jd: float) -> bool:
         a, e = self.abhijit()
         return a <= jd < e
+
+    def muhurta_nr(self, jd: float) -> tuple[str, int]:
+        """15 Muhūrtas je Tag- und Nachtbogen → ('tag'|'nacht', 1..15)."""
+        if self.aufgang <= jd < self.untergang:
+            return "tag", int((jd - self.aufgang) / ((self.untergang - self.aufgang) / 15)) + 1
+        n = int((jd - self.untergang) / ((self.naechster_aufgang - self.untergang) / 15)) + 1
+        return "nacht", max(1, min(n, 15))
+
+    def kala_vela_achtel(self) -> int:
+        """Sonnenabschnitt des Tagbogens (Folge ab Wochentagsherr, wie Upagraha Kāla der Engine)."""
+        return (0 - self.wochentag) % 7 + 1
 
     def hora_herr(self, jd: float) -> str:
         if HORA_PROPORTIONAL:
@@ -273,6 +348,15 @@ class Radix:
         return self.chart["lagna_idx"]
 
     @property
+    def schluesselplaneten(self) -> list[str]:
+        """Herren von Janma-Lagna und 5. Haus (Radix), ohne Doppelungen."""
+        out: list[str] = []
+        for p, h in self.chart["lordships"].items():
+            if (1 in h or 5 in h) and p not in out:
+                out.append(p)
+        return out
+
+    @property
     def wohlstandsherren(self) -> set[str]:
         """Herren des 2. und 11. Hauses (engine: compute_lordships)."""
         return {p for p, h in self.chart["lordships"].items() if 2 in h or 11 in h}
@@ -333,12 +417,20 @@ def tithi_name(tithi: int) -> str:
     return f"{'Ś' if tithi <= 15 else 'K'}-{TITHI[(tithi - 1) % 15]}"
 
 
+def _abstand(a: float, b: float) -> float:
+    return abs((a - b + 180.0) % 360.0 - 180.0)
+
+
 def bewerten(jd: float, tag: Tag, radix: Radix, modus: str,
              lat: float, lon: float) -> Bewertung:
     b = Bewertung(jd)
     lons, ayan, engine = ae.compute_positions(jd, lat, lon)
     b.lons, b.ayan, b.engine = lons, ayan, engine
     sonne, mond = lons["Sun"], lons["Moon"]
+    try:
+        retro = ae._retro_flags(jd)
+    except Exception:
+        retro = {}
 
     nak_name, nak_herr, _ = ae.nakshatra_of(mond)
     nak = ae.nak_index(nak_name)
@@ -348,8 +440,27 @@ def bewerten(jd: float, tag: Tag, radix: Radix, modus: str,
     yoga = ae.YOGA_NAMES.index(pan["yoga"])
     karana = pan["karana"]
     mond_rashi = int(mond // 30) % 12
+    wt = tag.wochentag
 
-    # Tithi
+    zeichen = {g: int(lons[g] // 30) % 12 for g in GRAHAS}
+    lagna = int(lons["Ascendant"] // 30) % 12
+    haus = {g: (zeichen[g] - lagna) % 12 + 1 for g in GRAHAS}
+    besetzung: dict[int, list[str]] = {}
+    for g in GRAHAS:
+        besetzung.setdefault(zeichen[g], []).append(g)
+    aspekte = ae.graha_aspects_by_sign({g: {"sign_idx": zeichen[g]} for g in GRAHAS})
+
+    def herr_von(h: int) -> str:
+        return ae.SIGN_LORDS[ae.SIGNS[(lagna + h - 1) % 12]]
+
+    def verbrannt(g: str) -> bool:
+        orb = getattr(ae, "_COMBUST_ORB", {}).get(g, 8.0)
+        return g not in ("Sun", "Rahu", "Ketu") and _abstand(lons[g], sonne) < orb
+
+    def uebel_konj(g: str) -> list[str]:
+        return [x for x in besetzung.get(zeichen[g], []) if x != g and x in HARTE_UEBELTAETER]
+
+    # ── Pañcāṅga ────────────────────────────────────────────────────────────
     if tithi == 30:
         b.sperren.append("Amāvasyā")
     elif pakṣa_tithi in RIKTA_TITHI:
@@ -358,32 +469,35 @@ def bewerten(jd: float, tag: Tag, radix: Radix, modus: str,
         b.punkte(2, f"Tithi {tithi_name(tithi)}")
     elif pakṣa_tithi == 8:
         b.punkte(-1, f"Tithi {tithi_name(tithi)}")
-    if tithi <= 15:
-        b.punkte(1, "Śukla Pakṣa")
+    if tithi <= 15 and modus == "kauf":
+        b.punkte(P_SUKLA_KAUF, "Zunehmender Mond (Kauf)")
+    if pakṣa_tithi == DAGDHA_TITHI[wt] and tithi != 30:
+        b.punkte(-2, f"Dagdha-Tithi ({tithi_name(tithi)} am {WOCHENTAG[wt]})")
 
-    # Vāra
-    b.punkte(VARA_PUNKTE[tag.wochentag], f"Vāra {VARA[tag.wochentag]}")
+    b.punkte(VARA_PUNKTE[wt], f"Vāra {VARA[wt]}")
 
-    # Nakṣatra
-    gut, gegenteil = (NAK_KAUF, NAK_VERKAUF) if modus == "kauf" else (NAK_VERKAUF, NAK_KAUF)
-    if nak in gut:
-        b.punkte(3, f"Nakṣatra {NAKSHATRA[nak]} ({modus})")
-    elif nak in gegenteil:
-        b.punkte(-2, f"Nakṣatra {NAKSHATRA[nak]} (ungünstig für {modus})")
+    if nak in NAK_TRADING:
+        b.punkte(P_NAK_TRADING, f"Trading-Nakṣatra {NAKSHATRA[nak]}")
+    elif modus == "kauf" and nak in NAK_KAUF_MC:
+        b.punkte(P_NAK_MC, f"Nakṣatra {NAKSHATRA[nak]} (Kauf, Muhūrta Cintāmaṇi)")
+    elif modus == "verkauf" and nak in NAK_VERKAUF_MC:
+        b.punkte(P_NAK_MC, f"Nakṣatra {NAKSHATRA[nak]} (Verkauf, Muhūrta Cintāmaṇi)")
+    if modus == "kauf" and nak in NAK_VERKAUF_MC:
+        b.punkte(P_NAK_KAUF_VERBOTEN, f"Nakṣatra {NAKSHATRA[nak]} (ungünstig für Kauf)")
+    if nak == AMRITA_SIDDHI[wt]:
+        b.punkte(2, f"Amṛta-Siddhi-Yoga ({VARA[wt]} + {NAKSHATRA[nak]})")
 
-    # Yoga
     if yoga in YOGA_SPERRE:
         b.sperren.append(f"Yoga {YOGA[yoga]}")
     elif yoga in YOGA_UNGUENSTIG:
         b.punkte(-2, f"Yoga {YOGA[yoga]}")
 
-    # Karaṇa
     if karana == "Vishti":
         b.sperren.append("Viṣṭi-Karaṇa (Bhadrā)")
     elif karana == "Vanija":
         b.punkte(1, "Vaṇija-Karaṇa (Handel)")
 
-    # Tārābala
+    # ── Individuell: Tārābala, Candrabala ───────────────────────────────────
     tara = ((nak - radix.mond_nak) % 27) % 9
     if tara in TARA_SPERRE:
         b.sperren.append(f"Tārā {TARA[tara]}")
@@ -394,7 +508,6 @@ def bewerten(jd: float, tag: Tag, radix: Radix, modus: str,
     elif tara == 0:
         b.punkte(-1, "Janma-Tārā")
 
-    # Candrabala
     chandra_haus = (mond_rashi - radix.mond_rashi) % 12 + 1
     if chandra_haus == 8:
         b.sperren.append("Candrāṣṭama")
@@ -403,76 +516,156 @@ def bewerten(jd: float, tag: Tag, radix: Radix, modus: str,
     elif chandra_haus in CHANDRA_SCHLECHT:
         b.punkte(-2, f"Mond im {chandra_haus}. vom Janma-Mond")
 
-    # Horā
+    # ── Horā ───────────────────────────────────────────────────────────────
     hora = tag.hora_herr(jd)
     b.punkte(HORA_PUNKTE[hora], f"Horā {PLANET_DE[hora]}")
     if hora in radix.wohlstandsherren:
         b.punkte(1, f"Horā-Herr {PLANET_DE[hora]} = Herr 2./11. Radix")
 
-    # Tagesabschnitte
+    # ── Tagesabschnitte ─────────────────────────────────────────────────────
     achtel = tag.achtel(jd)
     if achtel is not None:
-        if achtel == RAHU_KALA[tag.wochentag]:
+        if achtel == RAHU_KALA[wt]:
             b.sperren.append("Rāhu Kāla")
-        elif achtel == YAMAGANDA[tag.wochentag]:
-            b.punkte(-3, "Yamagaṇḍa")
-        elif achtel == GULIKA[tag.wochentag]:
-            b.punkte(-2, "Gulika Kāla")
-    if tag.ist_abhijit(jd) and tag.wochentag != MITTWOCH:
+        else:
+            if achtel == YAMAGANDA[wt]:
+                b.punkte(P_YAMAGANDA, "Yamagaṇḍa")
+            if achtel == GULIKA[wt]:
+                b.punkte(P_GULIKA, "Gulika Kāla")
+            if achtel == tag.kala_vela_achtel():
+                b.punkte(P_KALA_VELA, "Kāla Velā")
+    bogen, nr = tag.muhurta_nr(jd)
+    if (bogen == "tag" and nr in DURMUHURTA_TAG[wt]) or \
+       (bogen == "nacht" and nr in DURMUHURTA_NACHT[wt]):
+        b.sperren.append(f"Durmuhūrta ({nr}. Muhūrta {'des Tages' if bogen == 'tag' else 'der Nacht'})")
+    if tag.ist_abhijit(jd) and wt != MITTWOCH:
         b.punkte(2, "Abhijit Muhūrta")
 
-    # Muhūrta-Lagna
-    lagna = int(lons["Ascendant"] // 30) % 12
-    besetzung: dict[int, list[str]] = {}
-    for g in GRAHAS:
-        besetzung.setdefault(int(lons[g] // 30) % 12, []).append(g)
-
-    achtes = (lagna + 7) % 12
-    if besetzung.get(achtes):
-        namen = ", ".join(PLANET_DE[g] for g in besetzung[achtes])
-        b.punkte(-2, f"8. vom Lagna besetzt ({namen})")
-
-    wohl = sum(1 for haus in (1, 4, 5, 7, 9, 10)
-               for g in besetzung.get((lagna + haus - 1) % 12, []) if g in WOHLTAETER)
-    b.punkte(min(wohl, 2), "Wohltäter in Kendra/Trikoṇa")
-
-    # Muhūrta-Lagna: keine Übeltäter
+    # ── Muhūrta-Lagna: keine Übeltäter ──────────────────────────────────────
     im_lagna = [g for g in besetzung.get(lagna, []) if g in UEBELTAETER]
     if im_lagna:
         namen = ", ".join(PLANET_DE[g] for g in im_lagna)
         if im_lagna == ["Sun"]:
-            b.punkte(LAGNA_SONNE_BESETZT, f"Sonne im Muhūrta-Lagna")
+            b.punkte(LAGNA_SONNE_BESETZT, "Sonne im Muhūrta-Lagna")
         elif LAGNA_UEBEL_SPERRE:
             b.sperren.append(f"Übeltäter im Lagna ({namen})")
         else:
             b.punkte(LAGNA_UEBEL_BESETZT, f"Übeltäter im Muhūrta-Lagna ({namen})")
 
-    # 2. und 5. Haus vom Muhūrta-Lagna: Affliktionen prüfen
-    aspekte = ae.graha_aspects_by_sign({g: {"sign_idx": int(lons[g] // 30) % 12}
-                                        for g in GRAHAS})
-    for haus, name in GESCHUETZTE_HAEUSER.items():
-        zeichen = (lagna + haus - 1) % 12
+    achtes = (lagna + 7) % 12
+    if besetzung.get(achtes):
+        b.punkte(-2, f"8. vom Lagna besetzt ({', '.join(PLANET_DE[g] for g in besetzung[achtes])})")
+
+    wohl = sum(1 for g in WOHLTAETER if haus[g] in KENDRA_TRIKONA)
+    b.punkte(min(wohl, 2), "Wohltäter in Kendra/Trikoṇa")
+
+    # ── Lagna-Herr stark ────────────────────────────────────────────────────
+    lh = herr_von(1)
+    if haus[lh] in DUSTHANA:
+        b.punkte(P_LAGNAHERR_DUSTHANA, f"Lagna-Herr {PLANET_DE[lh]} im {haus[lh]}. Haus")
+    elif haus[lh] in KENDRA_TRIKONA or haus[lh] == 11:
+        b.punkte(P_LAGNAHERR_GUT, f"Lagna-Herr {PLANET_DE[lh]} im {haus[lh]}. Haus")
+    if lh not in HARTE_UEBELTAETER and uebel_konj(lh):
+        b.punkte(P_LAGNAHERR_UEBEL_KONJ,
+                 f"Lagna-Herr {PLANET_DE[lh]} mit {', '.join(PLANET_DE[x] for x in uebel_konj(lh))}")
+    if verbrannt(lh):
+        b.punkte(P_LAGNAHERR_VERBRANNT, f"Lagna-Herr {PLANET_DE[lh]} verbrannt")
+
+    # ── Mond ───────────────────────────────────────────────────────────────
+    if haus["Moon"] == 8:
+        b.sperren.append("Mond im 8. vom Muhūrta-Lagna")
+    elif haus["Moon"] in (6, 12):
+        b.punkte(P_MOND_6_12, f"Mond im {haus['Moon']}. vom Muhūrta-Lagna")
+    knoten = [k for k in ("Rahu", "Ketu") if _abstand(mond, lons[k]) <= MOND_KNOTEN_ORB]
+    if knoten:
+        k = knoten[0]
+        b.punkte(P_MOND_KNOTEN, f"Mond nahe {PLANET_DE[k]} ({_abstand(mond, lons[k]):.1f}°)")
+
+    # ── Merkur ─────────────────────────────────────────────────────────────
+    merkur_minus = 0
+    if haus["Mercury"] in MERKUR_GUTE_HAEUSER:
+        b.punkte(P_MERKUR_GUT, f"Merkur im {haus['Mercury']}. Haus")
+    elif haus["Mercury"] in DUSTHANA:
+        b.punkte(P_MERKUR_DUSTHANA, f"Merkur im {haus['Mercury']}. Haus")
+        merkur_minus += 1
+    if retro.get("Mercury"):
+        b.punkte(P_MERKUR_RETRO, "Merkur rückläufig")
+        merkur_minus += 1
+    if verbrannt("Mercury"):
+        b.punkte(P_MERKUR_VERBRANNT, f"Merkur verbrannt ({_abstand(lons['Mercury'], sonne):.1f}° zur Sonne)")
+        merkur_minus += 1
+    if uebel_konj("Mercury"):
+        b.punkte(P_MERKUR_UEBEL_KONJ,
+                 f"Merkur mit {', '.join(PLANET_DE[x] for x in uebel_konj('Mercury'))}")
+        merkur_minus += 1
+    if merkur_minus and 8 in radix.chart["lordships"].get("Mercury", []):
+        b.punkte(P_MERKUR_RADIX_8, "Merkur ist Radix-8.-Herr: Stellung muss sauber sein")
+    if nak == SVATI and merkur_minus == 0 and haus["Mercury"] in MERKUR_GUTE_HAEUSER:
+        b.punkte(P_SVATI_MERKUR, "Svātī mit starkem Merkur")
+
+    # ── 2. und 5. Haus geschützt ────────────────────────────────────────────
+    for h, name in GESCHUETZTE_HAEUSER.items():
+        z = (lagna + h - 1) % 12
+        herr = herr_von(h)
+        herr_schwach = haus[herr] in DUSTHANA or verbrannt(herr)
         rein = True
-        insassen = [g for g in besetzung.get(zeichen, []) if g in UEBELTAETER]
+        insassen = [g for g in besetzung.get(z, []) if g in UEBELTAETER]
+        if h == 5 and "Rahu" in insassen:
+            rein = False
+            insassen = [g for g in insassen if g != "Rahu"]
+            if herr_schwach:
+                b.punkte(P_RAHU_5_SCHWACH, f"Rāhu im 5. bei schwachem 5. Herrn ({PLANET_DE[herr]})")
+            else:
+                b.punkte(P_RAHU_5_KONTROLLIERT, "Rāhu im 5. (5. Herr gut gestellt)")
         if insassen:
             rein = False
             p_bes = HAUS_SONNE_BESETZT if insassen == ["Sun"] else HAUS_UEBEL_BESETZT
             b.punkte(p_bes, f"{name} besetzt von {', '.join(PLANET_DE[g] for g in insassen)}")
-        aspektierer = [g for g in aspekte.get(zeichen, [])
-                       if g in UEBELTAETER and g not in insassen]
+        aspektierer = [g for g in aspekte.get(z, []) if g in UEBELTAETER
+                       and z != zeichen[g]]
         if aspektierer:
             rein = False
             b.punkte(HAUS_UEBEL_ASPEKT,
                      f"{name} aspektiert von {', '.join(PLANET_DE[g] for g in aspektierer)}")
-        herr = ae.SIGN_LORDS[ae.SIGNS[zeichen]]
-        herr_haus = (int(lons[herr] // 30) % 12 - lagna) % 12 + 1
-        if herr_haus in (6, 8, 12):
+        if haus[herr] in DUSTHANA:
             rein = False
-            b.punkte(HAUS_HERR_DUSTHANA,
-                     f"Herr vom {name} ({PLANET_DE[herr]}) im {herr_haus}. Haus")
+            b.punkte(HAUS_HERR_DUSTHANA, f"Herr vom {name} ({PLANET_DE[herr]}) im {haus[herr]}. Haus")
         if rein:
             b.punkte(HAUS_REIN, f"{name} unbelastet")
 
+    # ── 11. Haus (Gewinne) — beim Verkauf doppelt ───────────────────────────
+    f11 = 2 if modus == "verkauf" else 1
+    h11 = herr_von(11)
+    if haus[h11] in DUSTHANA:
+        b.punkte(P_11_HERR_DUSTHANA * f11, f"Herr vom 11. Haus ({PLANET_DE[h11]}) im {haus[h11]}. Haus")
+    elif haus[h11] in KENDRA_TRIKONA or haus[h11] == 11:
+        b.punkte(P_11_HERR_GUT * f11, f"Herr vom 11. Haus ({PLANET_DE[h11]}) im {haus[h11]}. Haus")
+    in_11 = besetzung.get((lagna + 10) % 12, [])
+    if any(g in WOHLTAETER for g in in_11):
+        b.punkte(P_11_WOHLTAETER * f11,
+                 f"Wohltäter im 11. Haus ({', '.join(PLANET_DE[g] for g in in_11 if g in WOHLTAETER)})")
+    if "Rahu" in in_11:
+        b.punkte(P_11_RAHU, "Rāhu im 11. Haus (Spekulation, Upacaya)")
+
+    # ── Jupiter und Venus ──────────────────────────────────────────────────
+    jup_haeuser = {2, 5, 9, 11}
+    if haus["Jupiter"] in jup_haeuser:
+        b.punkte(P_JUPITER_IN, f"Jupiter im {haus['Jupiter']}. Haus")
+    else:
+        asp = sorted(h for h in jup_haeuser if "Jupiter" in aspekte.get((lagna + h - 1) % 12, []))
+        if asp:
+            b.punkte(P_JUPITER_ASPEKT, f"Jupiter aspektiert {', '.join(f'{h}.' for h in asp)} Haus")
+    if haus["Venus"] in (2, 11):
+        b.punkte(P_VENUS_2_11, f"Venus im {haus['Venus']}. Haus")
+
+    # ── Radix-Schlüsselplaneten (Herren Janma-Lagna und 5. Haus) ────────────
+    for rh in radix.schluesselplaneten:
+        if haus[rh] in DUSTHANA:
+            b.punkte(P_RADIXHERR_DUSTHANA, f"Radix-Herr {PLANET_DE[rh]} im {haus[rh]}. Haus")
+        elif haus[rh] in KENDRA_TRIKONA or haus[rh] == 11:
+            b.punkte(P_RADIXHERR_GUT, f"Radix-Herr {PLANET_DE[rh]} im {haus[rh]}. Haus")
+
+    # ── Bezug Muhūrta-Lagna ↔ Janma-Lagna ──────────────────────────────────
     rel = (lagna - radix.lagna_rashi) % 12 + 1
     if rel in (6, 8, 12):
         b.punkte(-2, f"Lagna im {rel}. vom Janma-Lagna")
@@ -492,6 +685,65 @@ def bewerten(jd: float, tag: Tag, radix: Radix, modus: str,
         "lagna": RASHI[lagna],
     }
     return b
+
+# ---------------------------------------------------------------------------
+# Phase: Daśā (Radix) und Gochara (Transit vom Janma-Mond) — Ebene 1 und 2
+# Nicht im Slot-Score enthalten: sie gilt für den ganzen Zeitraum gleich.
+# ---------------------------------------------------------------------------
+
+DASHA_GUTE_HERRSCHAFT = {1, 2, 5, 9, 11}
+DASHA_GUTE_STELLUNG = {1, 2, 5, 9, 10, 11}
+GOCHARA = {
+    "Jupiter": ({2, 5, 7, 9, 11}, {4, 8, 12}, ""),
+    "Saturn": ({3, 6, 11}, {12, 1, 2, 4, 8}, ""),
+    "Rahu": ({3, 6, 11}, {8, 12}, ""),
+}
+
+
+def phase_bewerten(radix: Radix, jd: float, lat: float, lon: float) -> dict:
+    c = radix.chart
+    herrschaft = c["lordships"]
+    zeilen: list[tuple[int, str]] = []
+
+    aktuell = (c.get("dashas") or {}).get("current") or {}
+    for ebene, p in (("Mahādaśā", aktuell.get("maha")), ("Antardaśā", aktuell.get("antar")),
+                     ("Pratyantardaśā", aktuell.get("pratyantar"))):
+        if not p:
+            continue
+        haeuser = sorted(herrschaft.get(p, []))
+        stellung = c["planets"][p].get("house", 0)
+        pk = sum(1 for h in haeuser if h in DASHA_GUTE_HERRSCHAFT) \
+            - sum(1 for h in haeuser if h in DUSTHANA)
+        pk += 1 if stellung in DASHA_GUTE_STELLUNG else -1 if stellung in DUSTHANA else 0
+        herr_txt = f"Herr von {', '.join(f'{h}.' for h in haeuser)} Haus, " if haeuser else ""
+        zeilen.append((pk, f"{ebene} {PLANET_DE[p]}: {herr_txt}steht im {stellung}. Haus"))
+
+    lons, _, _ = ae.compute_positions(jd, lat, lon)
+    for g, (gut, schlecht, _) in GOCHARA.items():
+        h = (int(lons[g] // 30) % 12 - radix.mond_rashi) % 12 + 1
+        pk = 1 if h in gut else -1 if h in schlecht else 0
+        zusatz = ""
+        if g == "Saturn" and h in (12, 1, 2):
+            zusatz = " (Sāḍe Sātī)"
+        elif g == "Saturn" and h in (4, 8):
+            zusatz = " (Kaṇṭaka/Aṣṭama Śani)"
+        zeilen.append((pk, f"Transit {PLANET_DE[g]} im {h}. vom Janma-Mond{zusatz}"))
+
+    summe = sum(pk for pk, _ in zeilen)
+    if summe >= 3:
+        urteil = "günstige Phase für Risiko"
+    elif summe <= -2:
+        urteil = "zurückhaltende Phase: Positionen klein halten"
+    else:
+        urteil = "gemischte Phase"
+    return {"zeilen": zeilen, "summe": summe, "urteil": urteil}
+
+
+def phase_text(ph: dict) -> str:
+    teile = [f"Phase: {ph['urteil']} ({ph['summe']:+d})"]
+    teile += [f"  {pk:+d}  {t}" for pk, t in ph["zeilen"]]
+    return "\n".join(teile)
+
 
 # ---------------------------------------------------------------------------
 # Zeitfenster
@@ -610,10 +862,13 @@ def ausgabe_csv(fenster: list[Fenster], pfad: str) -> None:
 
 
 def ausgabe_markdown(fenster: list[Fenster], pfad: str, radix: Radix, modus: str,
-                     markt: str, top: int) -> None:
+                     markt: str, top: int, phase: dict | None = None) -> None:
     zeilen = [f"## Muhūrta-Zeitfenster — {modus.capitalize()}, Markt {markt}", "",
               radix_zeile(radix), "",
               f"Engine: {radix.chart['meta']['engine']}", ""]
+    if phase:
+        zeilen += [f"**Phase: {phase['urteil']} ({phase['summe']:+d})**", ""]
+        zeilen += [f"- {pk:+d} {t}" for pk, t in phase["zeilen"]] + [""]
     for d in sorted({f.von.date() for f in fenster}):
         beste = sorted((f for f in fenster if f.von.date() == d),
                        key=lambda f: (-f.score, f.von))[:top]
@@ -824,6 +1079,7 @@ def main() -> int:
                                 a.min_score, kalender, a.lat, a.lon)
 
     print(f"Radix: {radix_zeile(radix)}")
+    print(phase_text(phase_bewerten(radix, jd_aus_dt(start), a.lat, a.lon)))
     print(f"Engine: {radix.chart['meta']['engine']}")
     print(f"Modus: {a.modus} | Markt: {a.markt} | {start:%d.%m.%Y}–"
           f"{ende - timedelta(days=1):%d.%m.%Y} | Schritt {a.schritt} Min.")
@@ -833,7 +1089,8 @@ def main() -> int:
         ausgabe_csv(fenster, a.csv)
         print(f"\nCSV gespeichert: {a.csv}")
     if a.markdown:
-        ausgabe_markdown(fenster, a.markdown, radix, a.modus, a.markt, a.top)
+        ausgabe_markdown(fenster, a.markdown, radix, a.modus, a.markt, a.top,
+                         phase_bewerten(radix, jd_aus_dt(start), a.lat, a.lon))
     return 0
 
 
