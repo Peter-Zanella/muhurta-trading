@@ -127,6 +127,30 @@ P_NAK_TRADING = 3
 P_NAK_MC = 2                                # MC-Nakṣatra des Modus (sofern nicht schon Trading-Nakṣatra)
 P_NAK_KAUF_VERBOTEN = -2                    # Kauf in einem Vikraya-Nakṣatra
 
+# ---------------------------------------------------------------------------
+# Verkaufsprofil (Exit / Gewinnmitnahme bei Aktien und ETFs)
+#   Pflicht: starkes 11. Haus/-Herr, stabiles 2. Haus, starker Lagna-Herr
+#   Sehr wichtig: Merkur stark, Mond nicht in 6/8/12
+#   Gut: Jupiter-Bezug zu 2/5/11, abnehmender Mond, Merkur-/Jupiter-/Venus-Horā
+#   Radix-Herren von 1, 2, 5, 11 wiegen mehr als ein einzelnes Nakṣatra
+# ---------------------------------------------------------------------------
+NAK_VERKAUF = {12, 14, 16, 21, 22, 26}      # Hasta, Svātī, Anurādhā, Śravaṇa, Dhaniṣṭhā, Revatī
+P_NAK_VERKAUF = 2
+P_NAK_VERKAUF_MC = 1
+VERKAUF_PFLICHT_SPERRE = True               # Pflicht stark verfehlt (≥ 2 Belastungen) → gesperrt
+P_VERKAUF_PFLICHT = -4                      # falls Sperre ausgeschaltet
+P_VERKAUF_PFLICHT_EINE = -3                 # genau eine Belastung: abwerten statt sperren
+PFLICHT_GRENZE = 2                          # ab so vielen Belastungen gilt «stark beschädigt»
+P_KRSNA_VERKAUF = 1                         # abnehmender Mond passt zum Exit
+P_MOND_6_12_VERKAUF = -3
+P_LAGNAHERR_GUT_VERKAUF = 2
+P_2_REIN_VERKAUF = 2
+P_MARS_IN_11_VERKAUF = -2                   # aggressiver Mars auf das 11. Haus
+P_MARS_ASPEKT_2_11_VERKAUF = -1             # Mars-Aspekt auf 2. oder 11. Haus (zusätzlich)
+P_RADIXHERR_VERKAUF = 2                     # Radix-Herren 1/2/5/11: gut +2, in 6/8/12 −2
+JUPITER_HAEUSER_KAUF = {2, 5, 9, 11}
+JUPITER_HAEUSER_VERKAUF = {2, 5, 11}
+
 GUTE_TITHI = {2, 3, 5, 7, 10, 11, 13}      # Pakṣa-Tithi
 RIKTA_TITHI = {4, 9, 14}
 
@@ -347,14 +371,14 @@ class Radix:
     def lagna_rashi(self) -> int:
         return self.chart["lagna_idx"]
 
+    def herren(self, haeuser: set[int]) -> list[str]:
+        """Radix-Herren der angegebenen Häuser, ohne Doppelungen."""
+        return [p for p, h in self.chart["lordships"].items() if set(h) & haeuser]
+
     @property
     def schluesselplaneten(self) -> list[str]:
-        """Herren von Janma-Lagna und 5. Haus (Radix), ohne Doppelungen."""
-        out: list[str] = []
-        for p, h in self.chart["lordships"].items():
-            if (1 in h or 5 in h) and p not in out:
-                out.append(p)
-        return out
+        """Herren von Janma-Lagna und 5. Haus (Kauf)."""
+        return self.herren({1, 5})
 
     @property
     def wohlstandsherren(self) -> set[str]:
@@ -441,6 +465,31 @@ def bewerten(jd: float, tag: Tag, radix: Radix, modus: str,
     karana = pan["karana"]
     mond_rashi = int(mond // 30) % 12
     wt = tag.wochentag
+    vk = modus == "verkauf"
+
+    def pflicht(was: str, belastungen: list[str]) -> None:
+        """Verkaufs-Pflichtkriterium: eine Belastung abwerten, ab PFLICHT_GRENZE sperren."""
+        if not belastungen:
+            return
+        text = f"{was}: {', '.join(belastungen)}"
+        if len(belastungen) >= PFLICHT_GRENZE:
+            if VERKAUF_PFLICHT_SPERRE:
+                b.sperren.append(f"Pflicht verfehlt, {text}")
+            else:
+                b.punkte(P_VERKAUF_PFLICHT, f"Pflicht verfehlt, {text}")
+        else:
+            b.punkte(P_VERKAUF_PFLICHT_EINE, f"Pflicht belastet, {text}")
+
+    def herr_belastungen(g: str) -> list[str]:
+        out = []
+        if haus[g] in DUSTHANA:
+            out.append(f"{PLANET_DE[g]} im {haus[g]}. Haus")
+        if verbrannt(g):
+            out.append(f"{PLANET_DE[g]} verbrannt")
+        konj = [x for x in uebel_konj(g)] if g not in HARTE_UEBELTAETER else []
+        if konj:
+            out.append(f"{PLANET_DE[g]} mit {', '.join(PLANET_DE[x] for x in konj)}")
+        return out
 
     zeichen = {g: int(lons[g] // 30) % 12 for g in GRAHAS}
     lagna = int(lons["Ascendant"] // 30) % 12
@@ -469,20 +518,25 @@ def bewerten(jd: float, tag: Tag, radix: Radix, modus: str,
         b.punkte(2, f"Tithi {tithi_name(tithi)}")
     elif pakṣa_tithi == 8:
         b.punkte(-1, f"Tithi {tithi_name(tithi)}")
-    if tithi <= 15 and modus == "kauf":
+    if tithi <= 15 and not vk:
         b.punkte(P_SUKLA_KAUF, "Zunehmender Mond (Kauf)")
+    if tithi > 15 and vk:
+        b.punkte(P_KRSNA_VERKAUF, "Abnehmender Mond (Verkauf)")
     if pakṣa_tithi == DAGDHA_TITHI[wt] and tithi != 30:
         b.punkte(-2, f"Dagdha-Tithi ({tithi_name(tithi)} am {WOCHENTAG[wt]})")
 
     b.punkte(VARA_PUNKTE[wt], f"Vāra {VARA[wt]}")
 
-    if nak in NAK_TRADING:
+    if vk:
+        if nak in NAK_VERKAUF:
+            b.punkte(P_NAK_VERKAUF, f"Verkaufs-Nakṣatra {NAKSHATRA[nak]}")
+        elif nak in NAK_VERKAUF_MC:
+            b.punkte(P_NAK_VERKAUF_MC, f"Nakṣatra {NAKSHATRA[nak]} (Verkauf, Muhūrta Cintāmaṇi)")
+    elif nak in NAK_TRADING:
         b.punkte(P_NAK_TRADING, f"Trading-Nakṣatra {NAKSHATRA[nak]}")
-    elif modus == "kauf" and nak in NAK_KAUF_MC:
+    elif nak in NAK_KAUF_MC:
         b.punkte(P_NAK_MC, f"Nakṣatra {NAKSHATRA[nak]} (Kauf, Muhūrta Cintāmaṇi)")
-    elif modus == "verkauf" and nak in NAK_VERKAUF_MC:
-        b.punkte(P_NAK_MC, f"Nakṣatra {NAKSHATRA[nak]} (Verkauf, Muhūrta Cintāmaṇi)")
-    if modus == "kauf" and nak in NAK_VERKAUF_MC:
+    if not vk and nak in NAK_VERKAUF_MC:
         b.punkte(P_NAK_KAUF_VERBOTEN, f"Nakṣatra {NAKSHATRA[nak]} (ungünstig für Kauf)")
     if nak == AMRITA_SIDDHI[wt]:
         b.punkte(2, f"Amṛta-Siddhi-Yoga ({VARA[wt]} + {NAKSHATRA[nak]})")
@@ -561,21 +615,27 @@ def bewerten(jd: float, tag: Tag, radix: Radix, modus: str,
 
     # ── Lagna-Herr stark ────────────────────────────────────────────────────
     lh = herr_von(1)
-    if haus[lh] in DUSTHANA:
+    if vk:
+        pflicht("Lagna-Herr", herr_belastungen(lh))
+        if haus[lh] in KENDRA_TRIKONA or haus[lh] == 11:
+            b.punkte(P_LAGNAHERR_GUT_VERKAUF, f"Lagna-Herr {PLANET_DE[lh]} im {haus[lh]}. Haus")
+    elif haus[lh] in DUSTHANA:
         b.punkte(P_LAGNAHERR_DUSTHANA, f"Lagna-Herr {PLANET_DE[lh]} im {haus[lh]}. Haus")
     elif haus[lh] in KENDRA_TRIKONA or haus[lh] == 11:
-        b.punkte(P_LAGNAHERR_GUT, f"Lagna-Herr {PLANET_DE[lh]} im {haus[lh]}. Haus")
-    if lh not in HARTE_UEBELTAETER and uebel_konj(lh):
+        b.punkte(P_LAGNAHERR_GUT_VERKAUF if vk else P_LAGNAHERR_GUT,
+                 f"Lagna-Herr {PLANET_DE[lh]} im {haus[lh]}. Haus")
+    if not vk and lh not in HARTE_UEBELTAETER and uebel_konj(lh):
         b.punkte(P_LAGNAHERR_UEBEL_KONJ,
                  f"Lagna-Herr {PLANET_DE[lh]} mit {', '.join(PLANET_DE[x] for x in uebel_konj(lh))}")
-    if verbrannt(lh):
+    if verbrannt(lh) and not vk:
         b.punkte(P_LAGNAHERR_VERBRANNT, f"Lagna-Herr {PLANET_DE[lh]} verbrannt")
 
     # ── Mond ───────────────────────────────────────────────────────────────
     if haus["Moon"] == 8:
         b.sperren.append("Mond im 8. vom Muhūrta-Lagna")
     elif haus["Moon"] in (6, 12):
-        b.punkte(P_MOND_6_12, f"Mond im {haus['Moon']}. vom Muhūrta-Lagna")
+        b.punkte(P_MOND_6_12_VERKAUF if vk else P_MOND_6_12,
+                 f"Mond im {haus['Moon']}. vom Muhūrta-Lagna")
     knoten = [k for k in ("Rahu", "Ketu") if _abstand(mond, lons[k]) <= MOND_KNOTEN_ORB]
     if knoten:
         k = knoten[0]
@@ -617,6 +677,14 @@ def bewerten(jd: float, tag: Tag, radix: Radix, modus: str,
                 b.punkte(P_RAHU_5_SCHWACH, f"Rāhu im 5. bei schwachem 5. Herrn ({PLANET_DE[herr]})")
             else:
                 b.punkte(P_RAHU_5_KONTROLLIERT, "Rāhu im 5. (5. Herr gut gestellt)")
+        if vk and h == 2:
+            hart = [g for g in insassen if g in HARTE_UEBELTAETER]
+            bel = ([f"besetzt von {', '.join(PLANET_DE[g] for g in hart)}"] if hart else [])
+            bel += [f"Herr {x}" for x in herr_belastungen(herr)]
+            if bel:
+                rein = False
+                pflicht("2. Haus", bel)
+                insassen = [g for g in insassen if g not in HARTE_UEBELTAETER]
         if insassen:
             rein = False
             p_bes = HAUS_SONNE_BESETZT if insassen == ["Sun"] else HAUS_UEBEL_BESETZT
@@ -627,16 +695,20 @@ def bewerten(jd: float, tag: Tag, radix: Radix, modus: str,
             rein = False
             b.punkte(HAUS_UEBEL_ASPEKT,
                      f"{name} aspektiert von {', '.join(PLANET_DE[g] for g in aspektierer)}")
-        if haus[herr] in DUSTHANA:
+        if vk and h == 2 and "Mars" in aspektierer:
+            b.punkte(P_MARS_ASPEKT_2_11_VERKAUF, f"Aggressiver Mars-Aspekt auf {name}")
+        if haus[herr] in DUSTHANA and not (vk and h == 2):
             rein = False
             b.punkte(HAUS_HERR_DUSTHANA, f"Herr vom {name} ({PLANET_DE[herr]}) im {haus[herr]}. Haus")
         if rein:
-            b.punkte(HAUS_REIN, f"{name} unbelastet")
+            b.punkte(P_2_REIN_VERKAUF if (vk and h == 2) else HAUS_REIN, f"{name} unbelastet")
 
     # ── 11. Haus (Gewinne) — beim Verkauf doppelt ───────────────────────────
-    f11 = 2 if modus == "verkauf" else 1
+    f11 = 2 if vk else 1
     h11 = herr_von(11)
-    if haus[h11] in DUSTHANA:
+    if vk and herr_belastungen(h11):
+        pflicht("11. Herr", herr_belastungen(h11))
+    elif haus[h11] in DUSTHANA:
         b.punkte(P_11_HERR_DUSTHANA * f11, f"Herr vom 11. Haus ({PLANET_DE[h11]}) im {haus[h11]}. Haus")
     elif haus[h11] in KENDRA_TRIKONA or haus[h11] == 11:
         b.punkte(P_11_HERR_GUT * f11, f"Herr vom 11. Haus ({PLANET_DE[h11]}) im {haus[h11]}. Haus")
@@ -646,9 +718,14 @@ def bewerten(jd: float, tag: Tag, radix: Radix, modus: str,
                  f"Wohltäter im 11. Haus ({', '.join(PLANET_DE[g] for g in in_11 if g in WOHLTAETER)})")
     if "Rahu" in in_11:
         b.punkte(P_11_RAHU, "Rāhu im 11. Haus (Spekulation, Upacaya)")
+    if vk:
+        if "Mars" in in_11:
+            b.punkte(P_MARS_IN_11_VERKAUF, "Aggressiver Mars im 11. Haus")
+        elif "Mars" in aspekte.get((lagna + 10) % 12, []):
+            b.punkte(P_MARS_ASPEKT_2_11_VERKAUF, "Aggressiver Mars-Aspekt auf 11. Haus (Gewinne)")
 
     # ── Jupiter und Venus ──────────────────────────────────────────────────
-    jup_haeuser = {2, 5, 9, 11}
+    jup_haeuser = JUPITER_HAEUSER_VERKAUF if vk else JUPITER_HAEUSER_KAUF
     if haus["Jupiter"] in jup_haeuser:
         b.punkte(P_JUPITER_IN, f"Jupiter im {haus['Jupiter']}. Haus")
     else:
@@ -659,11 +736,15 @@ def bewerten(jd: float, tag: Tag, radix: Radix, modus: str,
         b.punkte(P_VENUS_2_11, f"Venus im {haus['Venus']}. Haus")
 
     # ── Radix-Schlüsselplaneten (Herren Janma-Lagna und 5. Haus) ────────────
-    for rh in radix.schluesselplaneten:
+    radixherren = radix.herren({1, 2, 5, 11}) if vk else radix.schluesselplaneten
+    p_gut = P_RADIXHERR_VERKAUF if vk else P_RADIXHERR_GUT
+    p_schlecht = -P_RADIXHERR_VERKAUF if vk else P_RADIXHERR_DUSTHANA
+    for rh in radixherren:
+        rolle = "/".join(f"{h}." for h in sorted(radix.chart["lordships"].get(rh, [])))
         if haus[rh] in DUSTHANA:
-            b.punkte(P_RADIXHERR_DUSTHANA, f"Radix-Herr {PLANET_DE[rh]} im {haus[rh]}. Haus")
+            b.punkte(p_schlecht, f"Radix-Herr {PLANET_DE[rh]} ({rolle}) im {haus[rh]}. Haus")
         elif haus[rh] in KENDRA_TRIKONA or haus[rh] == 11:
-            b.punkte(P_RADIXHERR_GUT, f"Radix-Herr {PLANET_DE[rh]} im {haus[rh]}. Haus")
+            b.punkte(p_gut, f"Radix-Herr {PLANET_DE[rh]} ({rolle}) im {haus[rh]}. Haus")
 
     # ── Bezug Muhūrta-Lagna ↔ Janma-Lagna ──────────────────────────────────
     rel = (lagna - radix.lagna_rashi) % 12 + 1

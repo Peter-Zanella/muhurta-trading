@@ -127,6 +127,27 @@ Mars/Saturn/Rāhu/Ketu im Muhūrta-Lagna.
 | Radix | Herren von Janma-Lagna und 5. Haus im Muhūrta in Kendra/Trikoṇa/11 / in 6, 8, 12 | je +1 / −1 |
 | | Muhūrta-Lagna im 2., 11. / 1., 10. / 6., 8., 12. vom Janma-Lagna | +2 / +1 / −2 |
 
+### Verkaufsprofil (Exit, Gewinnmitnahme)
+
+Im Modus *verkauf* gilt eine eigene Gewichtung:
+
+| Priorität | Kriterium | Umsetzung |
+|---|---|---|
+| Pflicht | 11. Haus / 11. Herr stark | Herr im 6/8/12, verbrannt oder mit Mars/Saturn/Rāhu/Ketu = Belastung |
+| Pflicht | 2. Haus stabil | Mars/Saturn/Rāhu/Ketu im 2. oder belasteter 2. Herr = Belastung |
+| Pflicht | Lagna-Herr stark | wie 11. Herr |
+| | | je Pflichtkriterium: 1 Belastung −3, ab 2 Belastungen gesperrt (`PFLICHT_GRENZE`) |
+| Sehr wichtig | Merkur stark | wie oben (Haus, rückläufig, verbrannt, Übeltäter) |
+| Sehr wichtig | Mond nicht in 6/8/12 | 8. gesperrt, 6./12. −3 |
+| Gut | Jupiter im oder Aspekt auf 2/5/11 | +2 / +1 |
+| Gut | abnehmender Mond | +1 |
+| Gut | Merkur-, Jupiter-, Venus-Horā | +3 / +2 / +2 |
+| Radix | Herren von Janma-Lagna, 2., 5., 11. Haus im Muhūrta | gut gestellt +2, in 6/8/12 −2 |
+| Nakṣatra | Hasta, Svātī, Anurādhā, Śravaṇa, Dhaniṣṭhā, Revatī / sonst MC-Vikraya | +2 / +1 |
+| Meiden | Mars im 11. / Mars-Aspekt auf 2. oder 11. | −2 / −1 zusätzlich |
+
+Lagna-Herr gut gestellt +2, 2. Haus unbelastet +2, 11. Haus doppelt gewichtet.
+
 **Phase:** Daśā-Herren (Mahā-, Antar-, Pratyantardaśā) je nach Herrschaft über 1, 2, 5, 9, 11
 bzw. 6, 8, 12 und Stellung im Radix; Transit Jupiter, Saturn (inkl. Sāḍe Sātī) und Rāhu vom
 Janma-Mond.
