@@ -147,6 +147,11 @@ HAUS_UEBEL_ASPEKT = -1         # Graha-Dṛṣṭi eines Übeltäters (engine: g
 HAUS_HERR_DUSTHANA = -1        # Hausherr im 6./8./12. vom Muhūrta-Lagna
 HAUS_REIN = 1                  # weder besetzt noch aspektiert, Herr gut gestellt
 
+# Muhūrta-Lagna selbst soll frei von Übeltätern sein
+LAGNA_UEBEL_BESETZT = -3       # Mars, Saturn, Rāhu oder Ketu im Lagna
+LAGNA_SONNE_BESETZT = -1       # nur Sonne im Lagna
+LAGNA_UEBEL_SPERRE = True      # True = Übeltäter (ohne Sonne) im Lagna sperrt den Zeitpunkt
+
 # Handelszeiten: (Zeitzone, Öffnung, Schluss, nur Werktage)
 MAERKTE = {
     "SIX": ("Europe/Zurich", time(9, 0), time(17, 30), True),
@@ -430,6 +435,17 @@ def bewerten(jd: float, tag: Tag, radix: Radix, modus: str,
     wohl = sum(1 for haus in (1, 4, 5, 7, 9, 10)
                for g in besetzung.get((lagna + haus - 1) % 12, []) if g in WOHLTAETER)
     b.punkte(min(wohl, 2), "Wohltäter in Kendra/Trikoṇa")
+
+    # Muhūrta-Lagna: keine Übeltäter
+    im_lagna = [g for g in besetzung.get(lagna, []) if g in UEBELTAETER]
+    if im_lagna:
+        namen = ", ".join(PLANET_DE[g] for g in im_lagna)
+        if im_lagna == ["Sun"]:
+            b.punkte(LAGNA_SONNE_BESETZT, f"Sonne im Muhūrta-Lagna")
+        elif LAGNA_UEBEL_SPERRE:
+            b.sperren.append(f"Übeltäter im Lagna ({namen})")
+        else:
+            b.punkte(LAGNA_UEBEL_BESETZT, f"Übeltäter im Muhūrta-Lagna ({namen})")
 
     # 2. und 5. Haus vom Muhūrta-Lagna: Affliktionen prüfen
     aspekte = ae.graha_aspects_by_sign({g: {"sign_idx": int(lons[g] // 30) % 12}
