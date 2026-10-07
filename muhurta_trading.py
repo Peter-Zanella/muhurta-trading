@@ -51,6 +51,9 @@ if not ae._SWE:
              "(Sonnenaufgang, Rāhu Kāla, Lagna im Minutentakt).")
 swe = ae.swe
 
+# Schnittstellen-Version für app.py — bei Änderungen an Fenster/Bewertung erhöhen
+API_VERSION = 3
+
 # ---------------------------------------------------------------------------
 # Konfiguration
 # ---------------------------------------------------------------------------
@@ -837,6 +840,7 @@ class Fenster:
     score: int
     faktoren: list[tuple[int, str]]
     info: dict[str, str]
+    tag: date | None = None          # Handelstag (Datum in der Zeitzone des Marktes)
 
     @property
     def sterne(self) -> str:
@@ -849,6 +853,21 @@ class Fenster:
     @property
     def bewertung(self) -> str:
         return {"★★★": "sehr günstig", "★★": "günstig", "★": "brauchbar"}[self.sterne]
+
+
+def handelstag(dt: datetime, markt: str) -> date:
+    """Handelstag = Kalenderdatum in der Zeitzone des Marktes. Eine NYSE-Sitzung, die von
+    Asien aus über Mitternacht läuft, bleibt so ein zusammenhängender Tag."""
+    tzname = MAERKTE[markt][0]
+    return dt.astimezone(ZoneInfo(tzname)).date() if tzname else dt.date()
+
+
+def sitzungszeit(slots: list, schritt: int) -> str:
+    """Erster bis letzter Zeitpunkt einer Sitzung in Ortszeit, z. B. «20:30–03:00»."""
+    if not slots:
+        return ""
+    ende = slots[-1][0] + timedelta(minutes=schritt)
+    return f"{slots[0][0]:%H:%M}–{ende:%H:%M}"
 
 
 def im_markt(dt: datetime, markt: str) -> bool:
@@ -883,10 +902,11 @@ def fenster_berechnen(start: datetime, ende: datetime, schritt: int, radix: Radi
         if bew.gesperrt or bew.score < min_score:
             aktuell = None
         elif aktuell and aktuell.bis == t and aktuell.score == bew.score \
-                and aktuell.von.date() == t.date():
+                and aktuell.tag == handelstag(t, markt):
             aktuell.bis = naechst
         else:
-            aktuell = Fenster(t, naechst, bew.score, bew.faktoren, bew.info)
+            aktuell = Fenster(t, naechst, bew.score, bew.faktoren, bew.info,
+                              handelstag(t, markt))
             fenster.append(aktuell)
         t = naechst
     return fenster
@@ -907,25 +927,30 @@ def radix_zeile(radix: Radix) -> str:
 
 
 def ausgabe_konsole(fenster: list[Fenster], kalender: Tageskalender, tz: ZoneInfo,
-                    start: datetime, ende: datetime, top: int) -> None:
-    d = start.date()
-    while d < ende.date():
+                    start: datetime, tage: int, top: int, markt: str = "ALLE",
+                    protokoll: list | None = None, schritt: int = 15) -> None:
+    for i in range(tage):
+        d = start.date() + timedelta(days=i)
         tag = kalender.fuer_datum(d)
         rk_von, rk_bis = (dt_aus_jd(x, tz) for x in tag.achtel_zeit(RAHU_KALA[tag.wochentag]))
+        sitzung = ""
+        if protokoll is not None:
+            slots = [x for x in protokoll if handelstag(x[0], markt) == d]
+            if slots:
+                sitzung = f", Handelszeit {sitzungszeit(slots, schritt)} Ortszeit"
         print(f"\n=== {WOCHENTAG[tag.wochentag]}, {d:%d.%m.%Y} ({VARA[tag.wochentag]}) — "
               f"Aufgang {dt_aus_jd(tag.aufgang, tz):%H:%M}, "
               f"Untergang {dt_aus_jd(tag.untergang, tz):%H:%M}, "
-              f"Rāhu Kāla {rk_von:%H:%M}–{rk_bis:%H:%M} ===")
-        beste = sorted((f for f in fenster if f.von.date() == d),
+              f"Rāhu Kāla {rk_von:%H:%M}–{rk_bis:%H:%M}{sitzung} ===")
+        beste = sorted((f for f in fenster if f.tag == d),
                        key=lambda f: (-f.score, f.von))[:top]
         if not beste:
             print("  Keine geeigneten Zeitfenster.")
         for f in sorted(beste, key=lambda f: f.von):
-            i = f.info
-            print(f"  {f.sterne:<3} {f.von:%H:%M}–{f.bis:%H:%M}  Score {f.score:>2}  "
-                  f"| Horā {i['hora']}, {i['nakshatra']}, Tārā {i['tara']}, Lagna {i['lagna']}")
+            i_ = f.info
+            print(f"  {f.sterne:<3} {f.von:%d.%m. %H:%M}–{f.bis:%H:%M}  Score {f.score:>2}  "
+                  f"| Horā {i_['hora']}, {i_['nakshatra']}, Tārā {i_['tara']}, Lagna {i_['lagna']}")
             print(f"        {faktoren_text(f.faktoren)}")
-        d += timedelta(days=1)
 
 
 def ausgabe_csv(fenster: list[Fenster], pfad: str) -> None:
@@ -936,7 +961,7 @@ def ausgabe_csv(fenster: list[Fenster], pfad: str) -> None:
         w.writerow(felder)
         for f in fenster:
             i = f.info
-            w.writerow([f"{f.von:%Y-%m-%d}", f"{f.von:%H:%M}", f"{f.bis:%H:%M}", f.score,
+            w.writerow([f"{f.tag or f.von.date():%Y-%m-%d}", f"{f.von:%Y-%m-%d %H:%M}", f"{f.bis:%H:%M}", f.score,
                         f.bewertung, i["hora"], i["tithi"], i["nakshatra"], i["yoga"],
                         i["karana"], i["tara"], i["chandrabala"], i["lagna"],
                         faktoren_text(f.faktoren)])
@@ -950,15 +975,15 @@ def ausgabe_markdown(fenster: list[Fenster], pfad: str, radix: Radix, modus: str
     if phase:
         zeilen += [f"**Phase: {phase['urteil']} ({phase['summe']:+d})**", ""]
         zeilen += [f"- {pk:+d} {t}" for pk, t in phase["zeilen"]] + [""]
-    for d in sorted({f.von.date() for f in fenster}):
-        beste = sorted((f for f in fenster if f.von.date() == d),
+    for d in sorted({f.tag for f in fenster}):
+        beste = sorted((f for f in fenster if f.tag == d),
                        key=lambda f: (-f.score, f.von))[:top]
         zeilen += [f"### {WOCHENTAG[wochentag_so0(d)]}, {d:%d.%m.%Y}", "",
                    "| Zeit | Score | Bewertung | Horā | Nakṣatra | Tārā | Lagna |",
                    "|---|---|---|---|---|---|---|"]
         for f in sorted(beste, key=lambda f: f.von):
             i = f.info
-            zeilen.append(f"| {f.von:%H:%M}–{f.bis:%H:%M} | {f.score} | {f.sterne} "
+            zeilen.append(f"| {f.von:%d.%m. %H:%M}–{f.bis:%H:%M} | {f.score} | {f.sterne} "
                           f"{f.bewertung} | {i['hora']} | {i['nakshatra']} | "
                           f"{i['tara']} | {i['lagna']} |")
         zeilen.append("")
@@ -1154,17 +1179,21 @@ def main() -> int:
 
     start_datum = date.fromisoformat(a.von) if a.von else datetime.now(tz).date()
     start = datetime.combine(start_datum, time(0, 0), tzinfo=tz)
-    ende = datetime.combine(start_datum + timedelta(days=a.tage), time(0, 0), tzinfo=tz)
+    # +1 Tag, damit Sitzungen über Mitternacht (z. B. NYSE von Asien aus) vollständig sind
+    ende = datetime.combine(start_datum + timedelta(days=a.tage + 1), time(0, 0), tzinfo=tz)
 
+    protokoll: list = []
     fenster = fenster_berechnen(start, ende, a.schritt, radix, a.modus, a.markt,
-                                a.min_score, kalender, a.lat, a.lon)
+                                a.min_score, kalender, a.lat, a.lon, protokoll)
+    letzter = start_datum + timedelta(days=a.tage - 1)
+    fenster = [f for f in fenster if start_datum <= f.tag <= letzter]
 
     print(f"Radix: {radix_zeile(radix)}")
     print(phase_text(phase_bewerten(radix, jd_aus_dt(start), a.lat, a.lon)))
     print(f"Engine: {radix.chart['meta']['engine']}")
     print(f"Modus: {a.modus} | Markt: {a.markt} | {start:%d.%m.%Y}–"
-          f"{ende - timedelta(days=1):%d.%m.%Y} | Schritt {a.schritt} Min.")
-    ausgabe_konsole(fenster, kalender, tz, start, ende, a.top)
+          f"{letzter:%d.%m.%Y} | Schritt {a.schritt} Min.")
+    ausgabe_konsole(fenster, kalender, tz, start, a.tage, a.top, a.markt, protokoll, a.schritt)
 
     if a.csv:
         ausgabe_csv(fenster, a.csv)
