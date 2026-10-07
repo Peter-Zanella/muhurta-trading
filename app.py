@@ -45,6 +45,12 @@ import muhurta_trading as mt  # noqa: E402
 from fastapi import FastAPI, Form, Request  # noqa: E402
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse  # noqa: E402
 
+BENOETIGTE_API = 3
+VERSIONS_FEHLER = (
+    "" if getattr(mt, "API_VERSION", 0) >= BENOETIGTE_API else
+    "muhurta_trading.py im Repository ist älter als app.py. Bitte beide Dateien aus "
+    "derselben Lieferung hochladen und neu deployen.")
+
 app = FastAPI(title="Muhūrta Trading", docs_url=None, redoc_url=None, openapi_url=None)
 
 # ---------------------------------------------------------------------------
@@ -155,6 +161,7 @@ def parameter(q) -> tuple[dict, list[str]]:
         fehler.append("Startdatum im Format JJJJ-MM-TT angeben.")
     try:
         p["tage_i"] = max(1, min(MAX_TAGE, int(p["tage"])))
+        p["tage"] = str(p["tage_i"])
     except ValueError:
         fehler.append("Anzahl Tage als Zahl angeben.")
     try:
@@ -209,20 +216,31 @@ def geburt_query(p: dict) -> dict:
     return {k: p[k] for k in FORMFELDER if p.get(k, "") != std.get(k, "")}
 
 
+@functools.lru_cache(maxsize=8)
+def _berechnen_cache(geburt: str, glat: float, glon: float, goffset: float, glabel: str,
+                     hlat: float, hlon: float, hiana: str, von: date, tage: int, schritt: int,
+                     modus: str, markt: str, min_score: int):
+    """Berechnung zwischenspeichern: Zurück aus der Detailseite rechnet 90 Tage nicht neu."""
+    tz = ZoneInfo(hiana)
+    radix = radix_cache(geburt, glat, glon, goffset, glabel)
+    kalender = mt.Tageskalender(hlat, hlon, tz)
+    start = datetime.combine(von, time(0, 0), tzinfo=tz)
+    # +1 Tag, damit Sitzungen über Mitternacht (z. B. NYSE von Asien aus) vollständig sind
+    ende = datetime.combine(von + timedelta(days=tage + 1), time(0, 0), tzinfo=tz)
+    protokoll: list = []
+    fenster = mt.fenster_berechnen(start, ende, schritt, radix, modus, markt,
+                                   min_score, kalender, hlat, hlon, protokoll)
+    letzter = von + timedelta(days=tage - 1)
+    fenster = [f for f in fenster if von <= f.tag <= letzter]
+    return radix, kalender, fenster, protokoll
+
+
 def berechnen(p: dict):
     g, h = p["g"], p["h"]
-    tz = ZoneInfo(h["iana"])
-    radix = radix_cache(p["geburt"], g["lat"], g["lon"], g["offset"], g["label"])
-    kalender = mt.Tageskalender(h["lat"], h["lon"], tz)
-    start = datetime.combine(p["von_d"], time(0, 0), tzinfo=tz)
-    # +1 Tag, damit Sitzungen über Mitternacht (z. B. NYSE von Asien aus) vollständig sind
-    ende = datetime.combine(p["von_d"] + timedelta(days=p["tage_i"] + 1), time(0, 0), tzinfo=tz)
-    protokoll: list = []
-    fenster = mt.fenster_berechnen(start, ende, p["schritt_i"], radix, p["modus"], p["markt"],
-                                   p["min_i"], kalender, h["lat"], h["lon"], protokoll)
-    letzter = p["von_d"] + timedelta(days=p["tage_i"] - 1)
-    fenster = [f for f in fenster if p["von_d"] <= f.tag <= letzter]
-    return radix, kalender, fenster, protokoll
+    return _berechnen_cache(p["geburt"], g["lat"], g["lon"], g["offset"], g["label"],
+                            h["lat"], h["lon"], h["iana"], p["von_d"], p["tage_i"],
+                            p["schritt_i"], p["modus"], p["markt"], p["min_i"])
+
 
 # ---------------------------------------------------------------------------
 # HTML
@@ -328,6 +346,10 @@ table.grahas{border-collapse:collapse;width:100%;font-size:.9rem}
 table.grahas th,table.grahas td{text-align:left;padding:7px 12px 7px 0;border-bottom:1px solid var(--linie);white-space:nowrap}
 table.grahas th{color:var(--leise);font-weight:400}
 .navigation{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:28px}
+.bestenliste{margin:0 0 28px}
+.bestenliste h2{margin-bottom:10px}
+.bestenliste ol{margin:0;padding-left:30px;display:grid;gap:6px}
+.bestenliste li .score{margin:0 8px}
 details.phase{border:1px solid var(--linie);border-left:4px solid var(--leise);border-radius:8px;
   padding:10px 14px;margin:0 0 20px;background:var(--tafel)}
 details.phase.gut{border-left-color:#7fbf8f}
@@ -610,6 +632,23 @@ def radix_html(p: dict, radix) -> str:
             f'({h["lat"]:.4f}, {h["lon"]:.4f}, {E(h["iana"])}).</p>')
 
 
+def bestenliste_html(p: dict, fenster: list, anzahl: int = 10) -> str:
+    """Die besten Fenster des ganzen Zeitraums — bei langen Zeiträumen der Einstieg."""
+    if not fenster:
+        return ""
+    beste = sorted(fenster, key=lambda f: (-f.score, f.von))[:anzahl]
+    zeilen = []
+    for f in beste:
+        i = f.info
+        zeilen.append(
+            f'<li><a href="{E(slot_url(p, f.von))}">{E(datum_lang(f.tag, wochentag_so0(f.tag)))}'
+            f'{":" if f.von.date() != f.tag else ","} {zeit_label(f.von, f.tag)}–{f.bis:%H:%M}</a> '
+            f'<span class="score">{f.sterne} Score {f.score}</span> '
+            f'<span class="merkmale">Horā {E(i["hora"])}, {E(i["nakshatra"])}, Lagna {E(i["lagna"])}</span></li>')
+    return (f'<section class="bestenliste"><h2>Beste {len(beste)} Zeitfenster im Zeitraum</h2>'
+            f'<ol>{"".join(zeilen)}</ol></section>')
+
+
 def phase_html(ph: dict, titel: str) -> str:
     klasse = "gut" if ph["summe"] >= 3 else "vorsicht" if ph["summe"] <= -2 else "mittel"
     punkte = "".join(f'<li class="{"plus" if pk > 0 else ""}">{E(t)} ({pk:+d})</li>'
@@ -634,7 +673,8 @@ LEGENDE = """<div class="legende">
 
 @app.get("/health")
 def health():
-    return {"ok": True, "engine": ENGINE_COMMIT}
+    return {"ok": not VERSIONS_FEHLER, "engine": ENGINE_COMMIT,
+            "api": getattr(mt, "API_VERSION", 0), "fehler": VERSIONS_FEHLER or None}
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -660,6 +700,9 @@ def login(key: str = Form("")):
 def start(request: Request):
     if not zugang_ok(request):
         return RedirectResponse("/login", status_code=303)
+    if VERSIONS_FEHLER:
+        return seite("Muhūrta für Trades", f'<h1>Muhūrta für Trades</h1>'
+                     f'<div class="fehler"><p>{E(VERSIONS_FEHLER)}</p></div>')
     p, fehler = parameter(request.query_params)
     inhalt = "<h1>Muhūrta für Trades</h1>"
     if fehler:
@@ -678,7 +721,10 @@ def start(request: Request):
                                                                 tzinfo=kalender.tz)),
                            h["lat"], h["lon"])
     inhalt += phase_html(ph, f"Daśā Stand heute, Transit am {p['von_d']:%d.%m.%Y}")
-    inhalt += formular(p) + LEGENDE + tage_html(p, kalender, fenster, protokoll)
+    inhalt += formular(p)
+    if p["tage_i"] > 7:
+        inhalt += bestenliste_html(p, fenster)
+    inhalt += LEGENDE + tage_html(p, kalender, fenster, protokoll)
     return seite("Muhūrta für Trades", inhalt, p["h"]["label"])
 
 
