@@ -55,7 +55,7 @@ APP_KEY = os.environ.get("APP_KEY", "").strip()
 COOKIE = "muhurta_zugang"
 TZ_NAME = mt.STANDARD_TZ
 STANDARD_HANDELSORT = os.environ.get("APP_ORT", "").strip() or "Wädenswil, Schweiz"
-MAX_TAGE = 31
+MAX_TAGE = 90                     # längster Zeitraum pro Abfrage
 
 try:
     with open(os.path.join(_HIER, "ENGINE_COMMIT"), encoding="utf-8") as _fh:
@@ -63,7 +63,7 @@ try:
 except OSError:
     ENGINE_COMMIT = "lokal"
 
-MARKT_NAMEN = {"SIX": "SIX Zürich", "XETRA": "Xetra", "LSE": "London", "NYSE": "New York",
+MARKT_NAMEN = {"SIX": "SIX Zürich", "XETRA": "Xetra", "LSE": "London", "NYSE": "New York (NYSE/Nasdaq)",
                "KRYPTO": "Krypto (24/7)", "ALLE": "Ganzer Tag"}
 
 MONATE = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August",
@@ -215,10 +215,13 @@ def berechnen(p: dict):
     radix = radix_cache(p["geburt"], g["lat"], g["lon"], g["offset"], g["label"])
     kalender = mt.Tageskalender(h["lat"], h["lon"], tz)
     start = datetime.combine(p["von_d"], time(0, 0), tzinfo=tz)
-    ende = datetime.combine(p["von_d"] + timedelta(days=p["tage_i"]), time(0, 0), tzinfo=tz)
+    # +1 Tag, damit Sitzungen über Mitternacht (z. B. NYSE von Asien aus) vollständig sind
+    ende = datetime.combine(p["von_d"] + timedelta(days=p["tage_i"] + 1), time(0, 0), tzinfo=tz)
     protokoll: list = []
     fenster = mt.fenster_berechnen(start, ende, p["schritt_i"], radix, p["modus"], p["markt"],
                                    p["min_i"], kalender, h["lat"], h["lon"], protokoll)
+    letzter = p["von_d"] + timedelta(days=p["tage_i"] - 1)
+    fenster = [f for f in fenster if p["von_d"] <= f.tag <= letzter]
     return radix, kalender, fenster, protokoll
 
 # ---------------------------------------------------------------------------
@@ -447,6 +450,11 @@ def leiste_html(p: dict, slots: list, beste: list, aktuell: datetime | None = No
             f'<div class="leiste" style="{spalten}" aria-hidden="true">{"".join(stunden)}</div></div>')
 
 
+def zeit_label(t: datetime, d: date) -> str:
+    """Uhrzeit; mit Datum, wenn der Zeitpunkt nach Mitternacht des Handelstags liegt."""
+    return f"{t:%H:%M}" if t.date() == d else f"{t:%d.%m. %H:%M}"
+
+
 def tag_kopf(d: date, tag, tz) -> str:
     rk = [mt.dt_aus_jd(x, tz) for x in tag.achtel_zeit(mt.RAHU_KALA[tag.wochentag])]
     return (f'<div class="tag-kopf"><h2>{E(datum_lang(d, tag.wochentag))}</h2>'
@@ -466,15 +474,18 @@ def tage_html(p, kalender, fenster, protokoll) -> str:
     tz = kalender.tz
     nach_tag: dict[date, list] = {}
     for t, bew in protokoll:
-        nach_tag.setdefault(t.date(), []).append((t, bew))
+        nach_tag.setdefault(mt.handelstag(t, p["markt"]), []).append((t, bew))
     teile = []
     d = p["von_d"]
     for _ in range(p["tage_i"]):
         tag = kalender.fuer_datum(d)
         kopf = tag_kopf(d, tag, tz)
         slots = nach_tag.get(d, [])
-        beste = sorted((f for f in fenster if f.von.date() == d),
+        beste = sorted((f for f in fenster if f.tag == d),
                        key=lambda f: (-f.score, f.von))[:3]
+        if slots:
+            kopf = kopf.replace("</span></div>", f", Handelszeit {E(mt.sitzungszeit(slots, p['schritt_i']))}"
+                                                 f" Ortszeit</span></div>", 1)
         if not slots:
             teile.append(f'<section class="tag">{kopf}<p class="leer">Kein Handel an diesem Tag.</p></section>')
             d += timedelta(days=1)
@@ -485,7 +496,7 @@ def tage_html(p, kalender, fenster, protokoll) -> str:
             for f in sorted(beste, key=lambda f: f.von):
                 i = f.info
                 items.append(
-                    f'<li><div class="zeile"><span class="zeit">{f.von:%H:%M}–{f.bis:%H:%M}</span>'
+                    f'<li><div class="zeile"><span class="zeit">{zeit_label(f.von, d)}–{f.bis:%H:%M}</span>'
                     f'<span class="score">{f.sterne} Score {f.score}, {E(f.bewertung)}</span>'
                     f'<span class="merkmale">Horā {E(i["hora"])}, {E(i["nakshatra"])}, '
                     f'Tārā {E(i["tara"])}, Lagna {E(i["lagna"])}</span>'
@@ -684,7 +695,7 @@ def slot(request: Request):
         dt = datetime.strptime(zeit, "%Y-%m-%d %H:%M").replace(tzinfo=tz)
     except ValueError:
         fehler.append("Zeitpunkt im Format JJJJ-MM-TT HH:MM angeben.")
-    zurueck_von = dt.date().isoformat() if not fehler else p["von"]
+    zurueck_von = mt.handelstag(dt, p["markt"]).isoformat() if not fehler else p["von"]
     zurueck = url("/", p, von=zurueck_von, tage="5")
     kopf = f'<p class="radix"><a href="{E(zurueck)}">Zurück zur Übersicht</a></p>'
     if fehler:
@@ -703,12 +714,15 @@ def slot(request: Request):
         except Exception:
             retro = {}
         # Tagesleiste zur Navigation
-        tag_start = datetime.combine(dt.date(), time(0, 0), tzinfo=tz)
-        tag_ende = datetime.combine(dt.date() + timedelta(days=1), time(0, 0), tzinfo=tz)
+        hd = mt.handelstag(dt, p["markt"])
+        tag_start = datetime.combine(hd - timedelta(days=1), time(0, 0), tzinfo=tz)
+        tag_ende = datetime.combine(hd + timedelta(days=2), time(0, 0), tzinfo=tz)
         protokoll: list = []
         fenster = mt.fenster_berechnen(tag_start, tag_ende, p["schritt_i"], radix, p["modus"],
                                        p["markt"], p["min_i"], kalender, h["lat"], h["lon"],
                                        protokoll)
+        protokoll = [x for x in protokoll if mt.handelstag(x[0], p["markt"]) == hd]
+        fenster = [f for f in fenster if f.tag == hd]
         ende_tithi = mt.element_ende(jd, mt._idx_tithi)
         ende_nak = mt.element_ende(jd, mt._idx_nak)
         ende_yoga = mt.element_ende(jd, mt._idx_yoga)
@@ -868,7 +882,7 @@ def api_fenster(request: Request):
         "geburtsort": {k: p["g"][k] for k in ("label", "lat", "lon", "iana", "offset_str")},
         "handelsort": p["h"],
         "engine": ENGINE_COMMIT,
-        "fenster": [{"von": f.von.isoformat(), "bis": f.bis.isoformat(), "score": f.score,
+        "fenster": [{"handelstag": f.tag.isoformat(), "von": f.von.isoformat(), "bis": f.bis.isoformat(), "score": f.score,
                      "bewertung": f.bewertung, **f.info,
                      "faktoren": [{"punkte": pk, "text": t} for pk, t in f.faktoren]}
                     for f in fenster],
