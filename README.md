@@ -85,21 +85,23 @@ Drei Ebenen: **Phase** (Daśā und Transit vom Janma-Mond) als Ampel oben, darun
 **Muhūrta** jedes Zeitpunkts mit Score. Die Phase gilt für den ganzen Zeitraum gleich und
 geht deshalb nicht in den Score ein.
 
+**Gewichtung:** Nakṣatra sowie Lagna mit Hausherrschaft wiegen am meisten; Tithi, Yoga und Karaṇa nur schwach (ihre Sperren bleiben).
+
 **Sperren** (Zeitpunkt ausgeschlossen): Rāhu Kāla, Durmuhūrta, Amāvasyā, Viṣṭi-Karaṇa,
 Vyatīpāta/Vaidhṛti-Yoga, Vadha-Tārā, Candrāṣṭama, Mond im 8. vom Muhūrta-Lagna,
 Mars/Saturn/Rāhu/Ketu im Muhūrta-Lagna.
 
 | Bereich | Faktor | Punkte |
 |---|---|---|
-| Nakṣatra | Trading-Nakṣatra: Aśvinī, Mṛgaśirā, Punarvasu, Hasta, Citrā, Svātī, Anurādhā, Śravaṇa, Dhaniṣṭhā, Revatī | +3 |
-| | sonst MC-Nakṣatra des Modus (Kauf: Śatabhiṣā; Verkauf: Bharaṇī, Kṛttikā, Āśleṣā, Pūrvas) | +2 |
-| | Kauf in Bharaṇī, Kṛttikā, Āśleṣā oder einer Pūrva | −2 |
+| Nakṣatra | Trading-Nakṣatra: Aśvinī, Mṛgaśirā, Punarvasu, Hasta, Citrā, Svātī, Anurādhā, Śravaṇa, Dhaniṣṭhā, Revatī | +4 |
+| | sonst MC-Nakṣatra des Modus (Kauf: Śatabhiṣā; Verkauf: Bharaṇī, Kṛttikā, Āśleṣā, Pūrvas) | +3 |
+| | Kauf in Bharaṇī, Kṛttikā, Āśleṣā oder einer Pūrva | −3 |
 | | Amṛta-Siddhi-Yoga (Vāra + Nakṣatra) | +2 |
-| Tithi | 2, 3, 5, 7, 10, 11, 13 / Riktā 4, 9, 14 / Aṣṭamī | +2 / −3 / −1 |
-| | Dagdha-Tithi des Wochentags | −2 |
+| Tithi | 2, 3, 5, 7, 10, 11, 13 / Riktā 4, 9, 14 / Aṣṭamī | +1 / −2 / −1 |
+| | Dagdha-Tithi des Wochentags | −1 |
 | | zunehmender Mond, nur beim Kauf | +1 |
 | Vāra | Mi / Do / Fr / Di, Sa | +3 / +2 / +1 / −2 |
-| Yoga, Karaṇa | ungünstiger Yoga / Vaṇija-Karaṇa | −2 / +1 |
+| Yoga, Karaṇa | ungünstiger Yoga / Vaṇija-Karaṇa | −1 / +1 |
 | Horā | Merkur / Jupiter, Venus / Mond / Mars, Saturn | +3 / +2 / +1 / −2 |
 | | Horā-Herr = Herr des 2. oder 11. Radix-Hauses | +1 |
 | Tagesabschnitte | Yamagaṇḍa / Gulika / Kāla Velā | −3 / −2 / −2 |
@@ -109,7 +111,7 @@ Mars/Saturn/Rāhu/Ketu im Muhūrta-Lagna.
 | Lagna | Sonne im Lagna | −1 |
 | | 8. Haus besetzt | −2 |
 | | Wohltäter in Kendra/Trikoṇa (max.) | +2 |
-| Lagna-Herr | in Kendra/Trikoṇa/11 / in 6, 8, 12 | +1 / −2 |
+| Lagna-Herr | in Kendra/Trikoṇa/11 / in 6, 8, 12 | +2 / −3 |
 | | mit Mars/Saturn/Rāhu/Ketu / verbrannt | −1 / −1 |
 | Mond | im 6. oder 12. vom Muhūrta-Lagna | −2 |
 | | innerhalb 8° von Rāhu oder Ketu | −3 |
@@ -118,13 +120,13 @@ Mars/Saturn/Rāhu/Ketu im Muhūrta-Lagna.
 | | zusätzlich, wenn Merkur im Radix das 8. Haus beherrscht und belastet ist | −1 |
 | | Svātī mit sauberem Merkur | +1 |
 | 2. und 5. Haus | besetzt von Mars/Saturn/Ketu (Rāhu im 5. siehe unten) / nur Sonne | −2 / −1 |
-| (je Haus) | aspektiert von Übeltäter / Herr im 6, 8, 12 / unbelastet | −1 / −1 / +1 |
+| (je Haus) | aspektiert von Übeltäter / Herr im 6, 8, 12 / unbelastet | −1 / −2 / +1 |
 | | Rāhu im 5. bei schwachem / gut gestelltem 5. Herrn | −3 / −1 |
-| 11. Haus | Herr in Kendra/Trikoṇa/11 / in 6, 8, 12 (Verkauf ×2) | +1 / −2 |
+| 11. Haus | Herr in Kendra/Trikoṇa/11 / in 6, 8, 12 (Verkauf ×2) | +2 / −3 |
 | | Wohltäter im 11. (Verkauf ×2) / Rāhu im 11. | +1 / +1 |
 | Jupiter, Venus | Jupiter im 2, 5, 9, 11 / aspektiert eines davon | +2 / +1 |
 | | Venus im 2. oder 11. | +1 |
-| Radix | Herren von Janma-Lagna und 5. Haus im Muhūrta in Kendra/Trikoṇa/11 / in 6, 8, 12 | je +1 / −1 |
+| Radix | Herren von Janma-Lagna und 5. Haus im Muhūrta in Kendra/Trikoṇa/11 / in 6, 8, 12 | je +2 / −2 |
 | | Muhūrta-Lagna im 2., 11. / 1., 10. / 6., 8., 12. vom Janma-Lagna | +2 / +1 / −2 |
 
 ### Verkaufsprofil (Exit, Gewinnmitnahme)
@@ -142,11 +144,11 @@ Im Modus *verkauf* gilt eine eigene Gewichtung:
 | Gut | Jupiter im oder Aspekt auf 2/5/11 | +2 / +1 |
 | Gut | abnehmender Mond | +1 |
 | Gut | Merkur-, Jupiter-, Venus-Horā | +3 / +2 / +2 |
-| Radix | Herren von Janma-Lagna, 2., 5., 11. Haus im Muhūrta | gut gestellt +2, in 6/8/12 −2 |
-| Nakṣatra | Hasta, Svātī, Anurādhā, Śravaṇa, Dhaniṣṭhā, Revatī / sonst MC-Vikraya | +2 / +1 |
+| Radix | Herren von Janma-Lagna, 2., 5., 11. Haus im Muhūrta | gut gestellt +3, in 6/8/12 −3 |
+| Nakṣatra | Hasta, Svātī, Anurādhā, Śravaṇa, Dhaniṣṭhā, Revatī / sonst MC-Vikraya | +3 / +2 |
 | Meiden | Mars im 11. / Mars-Aspekt auf 2. oder 11. | −2 / −1 zusätzlich |
 
-Lagna-Herr gut gestellt +2, 2. Haus unbelastet +2, 11. Haus doppelt gewichtet.
+Lagna-Herr gut gestellt +3, 2. Haus unbelastet +2, 11. Haus doppelt gewichtet.
 
 **Phase:** Daśā-Herren (Mahā-, Antar-, Pratyantardaśā) je nach Herrschaft über 1, 2, 5, 9, 11
 bzw. 6, 8, 12 und Stellung im Radix; Transit Jupiter, Saturn (inkl. Sāḍe Sātī) und Rāhu vom

@@ -126,9 +126,9 @@ SVATI = 14
 # Muhūrta Cintāmaṇi: Kauf (kraya) / Verkauf (vikraya)
 NAK_KAUF_MC = {0, 13, 14, 21, 23, 26}       # Aśvinī, Citrā, Svātī, Śravaṇa, Śatabhiṣā, Revatī
 NAK_VERKAUF_MC = {1, 2, 8, 10, 19, 24}      # Bharaṇī, Kṛttikā, Āśleṣā, die drei Pūrvas
-P_NAK_TRADING = 3
-P_NAK_MC = 2                                # MC-Nakṣatra des Modus (sofern nicht schon Trading-Nakṣatra)
-P_NAK_KAUF_VERBOTEN = -2                    # Kauf in einem Vikraya-Nakṣatra
+P_NAK_TRADING = 4
+P_NAK_MC = 3                                # MC-Nakṣatra des Modus (sofern nicht schon Trading-Nakṣatra)
+P_NAK_KAUF_VERBOTEN = -3                    # Kauf in einem Vikraya-Nakṣatra
 
 # ---------------------------------------------------------------------------
 # Verkaufsprofil (Exit / Gewinnmitnahme bei Aktien und ETFs)
@@ -138,21 +138,30 @@ P_NAK_KAUF_VERBOTEN = -2                    # Kauf in einem Vikraya-Nakṣatra
 #   Radix-Herren von 1, 2, 5, 11 wiegen mehr als ein einzelnes Nakṣatra
 # ---------------------------------------------------------------------------
 NAK_VERKAUF = {12, 14, 16, 21, 22, 26}      # Hasta, Svātī, Anurādhā, Śravaṇa, Dhaniṣṭhā, Revatī
-P_NAK_VERKAUF = 2
-P_NAK_VERKAUF_MC = 1
+P_NAK_VERKAUF = 3
+P_NAK_VERKAUF_MC = 2
 VERKAUF_PFLICHT_SPERRE = True               # Pflicht stark verfehlt (≥ 2 Belastungen) → gesperrt
 P_VERKAUF_PFLICHT = -4                      # falls Sperre ausgeschaltet
 P_VERKAUF_PFLICHT_EINE = -3                 # genau eine Belastung: abwerten statt sperren
 PFLICHT_GRENZE = 2                          # ab so vielen Belastungen gilt «stark beschädigt»
 P_KRSNA_VERKAUF = 1                         # abnehmender Mond passt zum Exit
 P_MOND_6_12_VERKAUF = -3
-P_LAGNAHERR_GUT_VERKAUF = 2
+P_LAGNAHERR_GUT_VERKAUF = 3
 P_2_REIN_VERKAUF = 2
 P_MARS_IN_11_VERKAUF = -2                   # aggressiver Mars auf das 11. Haus
 P_MARS_ASPEKT_2_11_VERKAUF = -1             # Mars-Aspekt auf 2. oder 11. Haus (zusätzlich)
-P_RADIXHERR_VERKAUF = 2                     # Radix-Herren 1/2/5/11: gut +2, in 6/8/12 −2
+P_RADIXHERR_VERKAUF = 3                     # Radix-Herren 1/2/5/11: gut +2, in 6/8/12 −2
 JUPITER_HAEUSER_KAUF = {2, 5, 9, 11}
 JUPITER_HAEUSER_VERKAUF = {2, 5, 11}
+
+# Pañcāṅga-Glieder Tithi, Yoga, Karaṇa: bewusst schwächer gewichtet als Nakṣatra und
+# Lagna/Hausherrschaft. Ihre Sperren (Amāvasyā, Viṣṭi, Vyatīpāta, Vaidhṛti) bleiben.
+P_TITHI_GUT = 1
+P_TITHI_RIKTA = -2
+P_TITHI_ASHTAMI = -1
+P_TITHI_DAGDHA = -1
+P_YOGA_UNGUENSTIG = -1
+P_KARANA_VANIJA = 1
 
 GUTE_TITHI = {2, 3, 5, 7, 10, 11, 13}      # Pakṣa-Tithi
 RIKTA_TITHI = {4, 9, 14}
@@ -217,14 +226,14 @@ GESCHUETZTE_HAEUSER = {2: "2. Haus (Kapital)", 5: "5. Haus (Spekulation)"}
 HAUS_UEBEL_BESETZT = -2
 HAUS_SONNE_BESETZT = -1
 HAUS_UEBEL_ASPEKT = -1
-HAUS_HERR_DUSTHANA = -1
+HAUS_HERR_DUSTHANA = -2
 HAUS_REIN = 1
 P_RAHU_5_SCHWACH = -3          # Rāhu im 5. bei schwachem 5. Herrn (Gier, Übertreibung)
 P_RAHU_5_KONTROLLIERT = -1     # Rāhu im 5. bei gut gestelltem 5. Herrn
 
 # 11. Haus (Gewinne) stark — beim Verkauf doppelt gewichtet
-P_11_HERR_GUT = 1
-P_11_HERR_DUSTHANA = -2
+P_11_HERR_GUT = 2
+P_11_HERR_DUSTHANA = -3
 P_11_WOHLTAETER = 1
 P_11_RAHU = 1
 
@@ -234,14 +243,14 @@ P_JUPITER_ASPEKT = 1           # Jupiter aspektiert 2./5./9./11.
 P_VENUS_2_11 = 1
 
 # Lagna-Herr
-P_LAGNAHERR_GUT = 1            # in Kendra/Trikoṇa oder 11.
-P_LAGNAHERR_DUSTHANA = -2
+P_LAGNAHERR_GUT = 2            # in Kendra/Trikoṇa oder 11.
+P_LAGNAHERR_DUSTHANA = -3
 P_LAGNAHERR_UEBEL_KONJ = -1
 P_LAGNAHERR_VERBRANNT = -1
 
 # Radix-Schlüsselplaneten (Herren von Janma-Lagna und 5. Haus) im Muhūrta
-P_RADIXHERR_GUT = 1
-P_RADIXHERR_DUSTHANA = -1
+P_RADIXHERR_GUT = 2
+P_RADIXHERR_DUSTHANA = -2
 
 # Handelszeiten: (Zeitzone, Öffnung, Schluss, nur Werktage)
 MAERKTE = {
@@ -516,17 +525,17 @@ def bewerten(jd: float, tag: Tag, radix: Radix, modus: str,
     if tithi == 30:
         b.sperren.append("Amāvasyā")
     elif pakṣa_tithi in RIKTA_TITHI:
-        b.punkte(-3, f"Riktā-Tithi {tithi_name(tithi)}")
+        b.punkte(P_TITHI_RIKTA, f"Riktā-Tithi {tithi_name(tithi)}")
     elif pakṣa_tithi in GUTE_TITHI:
-        b.punkte(2, f"Tithi {tithi_name(tithi)}")
+        b.punkte(P_TITHI_GUT, f"Tithi {tithi_name(tithi)}")
     elif pakṣa_tithi == 8:
-        b.punkte(-1, f"Tithi {tithi_name(tithi)}")
+        b.punkte(P_TITHI_ASHTAMI, f"Tithi {tithi_name(tithi)}")
     if tithi <= 15 and not vk:
         b.punkte(P_SUKLA_KAUF, "Zunehmender Mond (Kauf)")
     if tithi > 15 and vk:
         b.punkte(P_KRSNA_VERKAUF, "Abnehmender Mond (Verkauf)")
     if pakṣa_tithi == DAGDHA_TITHI[wt] and tithi != 30:
-        b.punkte(-2, f"Dagdha-Tithi ({tithi_name(tithi)} am {WOCHENTAG[wt]})")
+        b.punkte(P_TITHI_DAGDHA, f"Dagdha-Tithi ({tithi_name(tithi)} am {WOCHENTAG[wt]})")
 
     b.punkte(VARA_PUNKTE[wt], f"Vāra {VARA[wt]}")
 
@@ -547,12 +556,12 @@ def bewerten(jd: float, tag: Tag, radix: Radix, modus: str,
     if yoga in YOGA_SPERRE:
         b.sperren.append(f"Yoga {YOGA[yoga]}")
     elif yoga in YOGA_UNGUENSTIG:
-        b.punkte(-2, f"Yoga {YOGA[yoga]}")
+        b.punkte(P_YOGA_UNGUENSTIG, f"Yoga {YOGA[yoga]}")
 
     if karana == "Vishti":
         b.sperren.append("Viṣṭi-Karaṇa (Bhadrā)")
     elif karana == "Vanija":
-        b.punkte(1, "Vaṇija-Karaṇa (Handel)")
+        b.punkte(P_KARANA_VANIJA, "Vaṇija-Karaṇa (Handel)")
 
     # ── Individuell: Tārābala, Candrabala ───────────────────────────────────
     tara = ((nak - radix.mond_nak) % 27) % 9
