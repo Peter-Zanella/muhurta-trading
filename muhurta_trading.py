@@ -184,8 +184,10 @@ TARA_SPERRE = {6}                           # Vadha / Naidhana
 CHANDRA_GUT = {1, 3, 6, 7, 10, 11}
 CHANDRA_SCHLECHT = {4, 12}
 
-HORA_PUNKTE = {"Mercury": 3, "Jupiter": 2, "Venus": 2, "Moon": 1,
-               "Sun": 0, "Mars": -2, "Saturn": -2}
+# Horā: nur leichte Feinabstimmung innerhalb eines guten Muhūrta
+HORA_PUNKTE = {"Mercury": 1, "Jupiter": 1, "Venus": 1, "Moon": 0,
+               "Sun": 0, "Mars": -1, "Saturn": -1}
+P_HORA_RADIX = 0               # Bonus, wenn Horā-Herr das 2./11. Radix-Haus beherrscht (ausgeschaltet)
 
 # Durmuhūrta (15 Muhūrtas je Tag-/Nachtbogen), Index 0 = Sonntag
 DURMUHURTA_TAG = [{14}, {9, 12}, {4}, {8}, {6, 12}, {4, 9}, {1, 2}]
@@ -585,8 +587,8 @@ def bewerten(jd: float, tag: Tag, radix: Radix, modus: str,
     # ── Horā ───────────────────────────────────────────────────────────────
     hora = tag.hora_herr(jd)
     b.punkte(HORA_PUNKTE[hora], f"Horā {PLANET_DE[hora]}")
-    if hora in radix.wohlstandsherren:
-        b.punkte(1, f"Horā-Herr {PLANET_DE[hora]} = Herr 2./11. Radix")
+    if P_HORA_RADIX and hora in radix.wohlstandsherren:
+        b.punkte(P_HORA_RADIX, f"Horā-Herr {PLANET_DE[hora]} = Herr 2./11. Radix")
 
     # ── Tagesabschnitte ─────────────────────────────────────────────────────
     achtel = tag.achtel(jd)
