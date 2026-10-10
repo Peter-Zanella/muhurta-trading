@@ -9,6 +9,7 @@ Rechnet über muhurta_trading.py, das seinerseits ausschliesslich astro_engine.p
 Routen:
   /            Formular + Zeitfenster mit Tagesleiste
   /slot        Muhūrta-Detail eines Zeitpunkts mit Chart (Klick in der Tagesleiste)
+  /methodik    Methodik (Inhalt aus methodik.html)
   /abgleich    Rohdaten eines Zeitpunkts (wie --abgleich)
   /api/fenster Zeitfenster als JSON
   /login       Zugangsschlüssel (nur wenn APP_KEY gesetzt)
@@ -326,7 +327,12 @@ h2.abstand{margin-top:24px}
 .chart-wahl{display:inline-flex;border:1px solid var(--linie);border-radius:6px;overflow:hidden;margin-bottom:10px}
 .chart-wahl button{background:transparent;color:var(--leise);border-radius:0;padding:6px 12px}
 .chart-wahl button[aria-pressed=true]{background:var(--kurkuma);color:#1b1404}
-.chart[data-stil=nord] .sued,.chart[data-stil=sued] .nord{display:none}
+.chart[data-stil=nord] .sued,.chart[data-stil=sued] .nord,
+.chart[data-art=rasi] .bhava,.chart[data-art=bhava] .rasi{display:none}
+.chart-wahlen{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.chart-wahlen .chart-wahl{margin-bottom:0}
+.chart-svg .vs{fill:#9cc3ff;font-weight:500}
+.bhava-hinweis{margin:10px 0 0;max-width:420px}
 .chart-svg{width:100%;max-width:420px;height:auto;display:block}
 .chart-svg .feld{fill:var(--tafel);stroke:#4a5890;stroke-width:1}
 .chart-svg .linie{fill:none;stroke:#4a5890;stroke-width:1}
@@ -358,6 +364,13 @@ details.phase.vorsicht{border-left-color:#e79aa9}
 details.phase summary{cursor:pointer}
 details.phase ul{margin:8px 0 0;padding-left:18px;color:var(--leise)}
 .leise{color:var(--leise);font-size:.88rem}
+nav.inhalt{margin:0 0 28px;color:var(--leise);font-size:.92rem;line-height:1.9}
+section.methodik{border-top:1px solid var(--linie);padding:22px 0 6px;scroll-margin-top:12px}
+section.methodik h2{margin-bottom:12px}
+section.methodik p,section.methodik li{max-width:72ch}
+section.methodik table.grahas td{white-space:normal;vertical-align:top}
+section.methodik table.grahas td:first-child{white-space:nowrap}
+code{font-size:.88em;background:var(--tafel);border:1px solid var(--linie);border-radius:4px;padding:0 4px}
 @media (max-width:760px){.detail-raster{grid-template-columns:1fr}}
 @media (max-width:600px){h1{font-size:1.9rem}.seite{padding:20px 14px 40px}}
 """
@@ -374,7 +387,8 @@ KOPF = """<!doctype html><html lang="de"><head><meta charset="utf-8">
 def seite(titel: str, inhalt: str, ort: str = "") -> HTMLResponse:
     ort_text = f"Handelsort {E(ort)}. " if ort else ""
     fuss = (f"<footer>Rechenquelle: astro_engine.py (Ved Chart Calc, Commit {E(ENGINE_COMMIT)}). "
-            f"{ort_text}Astrologische Auswertung, keine Anlageberatung.</footer>")
+            f"{ort_text}Astrologische Auswertung, keine Anlageberatung. "
+            f'<a href="/methodik">Methodik</a></footer>')
     return HTMLResponse(KOPF.format(titel=E(titel), css=CSS) + inhalt + fuss + "</main></body></html>")
 
 
@@ -565,6 +579,28 @@ def belegung(lons: dict, retro: dict) -> dict[int, list[tuple[str, str]]]:
     return out
 
 
+def bhava_von(lon: float, asc: float) -> int:
+    """Äqui-Bhāva (Bhāva Chalit) wie astro_engine.generate_chart: der Lagna-Grad ist die
+    Mitte (Madhya) jedes Hauses, jedes Bhāva reicht ±15° um seine Mitte."""
+    return int(((lon - asc + 15) % 360) // 30) + 1
+
+
+def belegung_bhava(lons: dict, retro: dict) -> dict[int, list[tuple[str, str]]]:
+    """Wie belegung(), aber jeder Graha im Zeichen seines Bhāva-Madhya.
+    Grahas, deren Bhāva vom Rāśi-Haus abweicht, sind hervorgehoben."""
+    asc = lons["Ascendant"]
+    lagna = int(asc // 30) % 12
+    out: dict[int, list[tuple[str, str]]] = {}
+    for g in ["Ascendant"] + mt.GRAHAS:
+        l = lons[g]
+        bh = 1 if g == "Ascendant" else bhava_von(l, asc)
+        rasi_haus = (int(l // 30) % 12 - lagna) % 12 + 1
+        r = "R" if retro.get(g) else ""
+        klasse = "la" if g == "Ascendant" else ("vs" if bh != rasi_haus else "gr")
+        out.setdefault((lagna + bh - 1) % 12, []).append((f"{KURZ[g]}{r} {int(l % 30)}°", klasse))
+    return out
+
+
 def _texte(x: float, y: float, eintraege: list, zeilenhoehe: float = 15) -> str:
     start = y - (len(eintraege) - 1) * zeilenhoehe / 2
     return "".join(f'<text x="{x}" y="{start + i * zeilenhoehe:.1f}" class="{k}" '
@@ -572,9 +608,12 @@ def _texte(x: float, y: float, eintraege: list, zeilenhoehe: float = 15) -> str:
                    for i, (txt, k) in enumerate(eintraege))
 
 
-def chart_sued(bel: dict, lagna: int, mitte: list[str]) -> str:
-    teile = ['<svg class="chart-svg sued" viewBox="0 0 400 400" role="img" '
-             'aria-label="Muhūrta-Chart südindisch">']
+CHART_ART = {"rasi": "Rāśi", "bhava": "Äqui-Bhāva"}
+
+
+def chart_sued(bel: dict, lagna: int, mitte: list[str], art: str = "rasi") -> str:
+    teile = [f'<svg class="chart-svg sued {art}" viewBox="0 0 400 400" role="img" '
+             f'aria-label="Muhūrta-Chart südindisch, {CHART_ART[art]}">']
     for zeichen, (r, c) in SUED_ZELLE.items():
         x, y = c * 100, r * 100
         teile.append(f'<rect x="{x}" y="{y}" width="100" height="100" class="feld"/>')
@@ -588,9 +627,9 @@ def chart_sued(bel: dict, lagna: int, mitte: list[str]) -> str:
     return "".join(teile)
 
 
-def chart_nord(bel: dict, lagna: int) -> str:
-    teile = ['<svg class="chart-svg nord" viewBox="0 0 400 400" role="img" '
-             'aria-label="Muhūrta-Chart nordindisch">',
+def chart_nord(bel: dict, lagna: int, art: str = "rasi") -> str:
+    teile = [f'<svg class="chart-svg nord {art}" viewBox="0 0 400 400" role="img" '
+             f'aria-label="Muhūrta-Chart nordindisch, {CHART_ART[art]}">',
              '<rect x="0" y="0" width="400" height="400" class="feld"/>',
              '<path d="M0 0L400 400M400 0L0 400M200 0L400 200L200 400L0 200Z" class="linie"/>']
     for haus in range(1, 13):
@@ -607,14 +646,19 @@ def chart_nord(bel: dict, lagna: int) -> str:
 CHART_SKRIPT = """<script>
 (function(){
   var box=document.querySelector('.chart');if(!box)return;
-  var stil='nord';try{stil=localStorage.getItem('muhurta_chart')||'nord';}catch(e){}
-  function setze(s){box.setAttribute('data-stil',s);
-    document.querySelectorAll('.chart-wahl button').forEach(function(b){
-      b.setAttribute('aria-pressed',b.dataset.stil===s?'true':'false');});
-    try{localStorage.setItem('muhurta_chart',s);}catch(e){}}
+  function hol(k,d){try{return localStorage.getItem(k)||d;}catch(e){return d;}}
+  function merk(k,v){try{localStorage.setItem(k,v);}catch(e){}}
+  function setze(attr,wert){box.setAttribute('data-'+attr,wert);
+    document.querySelectorAll('.chart-wahl button[data-'+attr+']').forEach(function(b){
+      b.setAttribute('aria-pressed',b.getAttribute('data-'+attr)===wert?'true':'false');});
+    merk('muhurta_chart_'+attr,wert);
+    var n=document.querySelector('.bhava-hinweis');
+    if(n)n.hidden=(attr==='art'?wert:box.getAttribute('data-art'))!=='bhava';}
   document.querySelectorAll('.chart-wahl button').forEach(function(b){
-    b.addEventListener('click',function(){setze(b.dataset.stil);});});
-  setze(stil);
+    b.addEventListener('click',function(){
+      if(b.dataset.stil)setze('stil',b.dataset.stil);else setze('art',b.dataset.art);});});
+  setze('stil',hol('muhurta_chart_stil',hol('muhurta_chart','nord')));
+  setze('art',hol('muhurta_chart_art','rasi'));
 })();
 </script>"""
 
@@ -805,12 +849,34 @@ def slot(request: Request):
 
     # Chart
     bel = belegung(lons, retro)
-    mitte = ["Muhūrta", f"{dt:%d.%m.%Y}", f"{dt:%H:%M}", h["label"].split(",")[0]]
-    chart = (f'<div class="chart-wahl" role="group" aria-label="Chart-Stil">'
+    bel_bh = belegung_bhava(lons, retro)
+    ort_kurz = h["label"].split(",")[0]
+    mitte = ["Muhūrta", f"{dt:%d.%m.%Y}", f"{dt:%H:%M}", ort_kurz]
+    mitte_bh = ["Äqui-Bhāva", f"{dt:%d.%m.%Y}", f"{dt:%H:%M}", ort_kurz]
+    asc_l = lons["Ascendant"]
+    wechsel = []
+    for gname in mt.GRAHAS:
+        rh = (int(lons[gname] // 30) % 12 - lagna) % 12 + 1
+        bh = bhava_von(lons[gname], asc_l)
+        if bh != rh:
+            wechsel.append(f"{mt.PLANET_DE[gname]} {rh}. → {bh}. Bhāva")
+    madhya = f"{int(asc_l % 30)}°{int((asc_l % 1) * 60):02d}′"
+    hinweis = (f'<p class="bhava-hinweis leise" hidden>Äqui-Bhāva: jedes Haus 30°, Mitte bei '
+               f'{madhya} jedes Zeichens (Lagna-Grad), Grenzen ±15°. '
+               + (f'Haus gewechselt: {E(", ".join(wechsel))}.' if wechsel
+                  else 'Kein Graha wechselt das Haus.')
+               + ' Die Bewertung rechnet mit ganzen Zeichen.</p>')
+    chart = (f'<div class="chart-wahlen">'
+             f'<div class="chart-wahl" role="group" aria-label="Chart-Art">'
+             f'<button type="button" data-art="rasi" aria-pressed="true">Rāśi</button>'
+             f'<button type="button" data-art="bhava" aria-pressed="false">Äqui-Bhāva</button></div>'
+             f'<div class="chart-wahl" role="group" aria-label="Chart-Stil">'
              f'<button type="button" data-stil="nord" aria-pressed="true">Nordindisch</button>'
-             f'<button type="button" data-stil="sued" aria-pressed="false">Südindisch</button></div>'
-             f'<div class="chart" data-stil="nord">{chart_nord(bel, lagna)}'
-             f'{chart_sued(bel, lagna, mitte)}</div>')
+             f'<button type="button" data-stil="sued" aria-pressed="false">Südindisch</button></div></div>'
+             f'<div class="chart" data-stil="nord" data-art="rasi">'
+             f'{chart_nord(bel, lagna)}{chart_sued(bel, lagna, mitte)}'
+             f'{chart_nord(bel_bh, lagna, "bhava")}{chart_sued(bel_bh, lagna, mitte_bh, "bhava")}</div>'
+             f'{hinweis}')
 
     # Pañcāṅga
     hora_bis = ""
@@ -850,13 +916,15 @@ def slot(request: Request):
         h_muh = (zeichen - lagna) % 12 + 1
         h_janma = (zeichen - radix.lagna_rashi) % 12 + 1
         h_mond = (zeichen - radix.mond_rashi) % 12 + 1
+        h_bh = 1 if gname == "Ascendant" else bhava_von(l, lons["Ascendant"])
+        bh_zelle = (f'<strong>{h_bh}</strong>' if h_bh != h_muh else f"{h_bh}")
         zeilen.append(
             f"<tr><td>{E(mt.PLANET_DE[gname])}{r}</td><td>{E(mt.RASHI[zeichen])}</td>"
             f"<td>{int(l % 30)}°{int((l % 1) * 60):02d}′</td>"
             f"<td>{E(mt.NAKSHATRA[mt.ae.nak_index(nak)])} {pada}</td>"
-            f"<td>{h_muh}</td><td>{h_janma}</td><td>{h_mond}</td></tr>")
+            f"<td>{h_muh}</td><td>{bh_zelle}</td><td>{h_janma}</td><td>{h_mond}</td></tr>")
     grahas = ('<div class="tabelle"><table class="grahas"><thead><tr><th>Graha</th><th>Zeichen</th>'
-              '<th>Grad</th><th>Nakṣatra</th><th>Haus vom Muhūrta-Lagna</th>'
+              '<th>Grad</th><th>Nakṣatra</th><th>Haus vom Muhūrta-Lagna</th><th>Äqui-Bhāva</th>'
               '<th>vom Janma-Lagna</th><th>vom Janma-Mond</th></tr></thead><tbody>'
               + "".join(zeilen) + "</tbody></table></div>")
 
@@ -880,6 +948,19 @@ def slot(request: Request):
               + f'<h2 class="abstand">Faktoren ({E(p["modus"])})</h2>{faktoren}</div></div>'
               + f'<h2>Grahas</h2>{grahas}{navigation}{CHART_SKRIPT}')
     return seite("Muhūrta-Detail", inhalt, h["label"])
+
+
+@app.get("/methodik", response_class=HTMLResponse)
+def methodik(request: Request):
+    """Methodik-Seite; Inhalt aus methodik.html neben app.py."""
+    if not zugang_ok(request):
+        return RedirectResponse("/login", status_code=303)
+    try:
+        with open(os.path.join(_HIER, "methodik.html"), encoding="utf-8") as fh:
+            inhalt = fh.read()
+    except OSError:
+        inhalt = '<h1>Methodik</h1><div class="fehler"><p>methodik.html fehlt im Repository.</p></div>'
+    return seite("Methodik", inhalt)
 
 
 @app.get("/abgleich", response_class=HTMLResponse)
