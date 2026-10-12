@@ -1,0 +1,197 @@
+<!-- Inhalt der Seite /methodik. Wird von app.py in das App-Layout eingesetzt. -->
+<p class="radix"><a href="/">Zurück zu den Zeitfenstern</a></p>
+<h1>Methodik</h1>
+<p class="radix">Wie die Zeitfenster für Kauf und Verkauf berechnet und bewertet werden. Stand Oktober 2026.</p>
+
+<nav class="inhalt" aria-label="Inhalt">
+<a href="#zweck">Zweck</a> · <a href="#grundlage">Rechengrundlage</a> · <a href="#phase">Phase</a> ·
+<a href="#sperren">Sperren</a> · <a href="#kauf">Kauf</a> · <a href="#verkauf">Verkauf</a> ·
+<a href="#radix">Radix</a> · <a href="#score">Score</a> · <a href="#grenzen">Grenzen</a> · <a href="#quellen">Quellen</a>
+</nav>
+
+<section class="methodik" id="zweck">
+<h2>Zweck und Grundsatz</h2>
+<p>Das Programm sucht im Raster von 10, 15 oder 30 Minuten die Zeitpunkte, an denen eine Order nach Muhūrta-Regeln günstig fällt, getrennt für Kauf (kraya) und Verkauf (vikraya). Es wählt keinen allgemein guten Muhūrta, sondern einen für Handel: Im Zentrum stehen Merkur, Mond, das 2., 5. und 11. Haus sowie Lagna und Lagna-Herr.</p>
+<p>Die Bewertung folgt drei Ebenen:</p>
+<ol>
+<li><strong>Radix und Daśā:</strong> Ist die laufende Periode überhaupt eine Phase für Risiko?</li>
+<li><strong>Transit (Gochara):</strong> Wie stehen Jupiter, Saturn und Rāhu zum Janma-Mond?</li>
+<li><strong>Muhūrta der konkreten Order:</strong> Pañcāṅga, Tagesabschnitte, Muhūrta-Lagna, Merkur, Mond und die Finanzhäuser des Moments.</li>
+</ol>
+<p>Ebene 1 und 2 ergeben eine Phasen-Ampel für den ganzen Zeitraum. Ebene 3 ergibt den Score jedes einzelnen Zeitpunkts. Ein Zeitpunkt mit hohem Score in einer zurückhaltenden Phase spricht für eine kleine Position, nicht für den Verzicht auf jedes Timing.</p>
+</section>
+
+<section class="methodik" id="grundlage">
+<h2>Rechengrundlage</h2>
+<p>Alle astronomischen Werte stammen aus <code>astro_engine.py</code> im Repository Ved Chart Calc, derselben Quelle wie die AstroVeda-Reports. Das Trading-Programm enthält keine eigene Astronomie, nur die Muhūrta-Bewertung.</p>
+<div class="tabelle"><table class="grahas">
+<thead><tr><th>Bereich</th><th>Festlegung</th><th>Funktion der Engine</th></tr></thead>
+<tbody>
+<tr><td>Ephemeride</td><td>Swiss Ephemeris (pyswisseph), ohne sie bricht das Programm ab</td><td><code>compute_positions</code></td></tr>
+<tr><td>Tierkreis</td><td>siderisch, Lahiri-Ayanāṃśa</td><td><code>set_sid_mode</code> vor jeder Rechnung</td></tr>
+<tr><td>Häuser</td><td>ganze Zeichen (Whole Sign)</td><td><code>compute_lordships</code></td></tr>
+<tr><td>Radix</td><td>vollständiges Horoskop wie im Report</td><td><code>generate_chart</code></td></tr>
+<tr><td>Orte</td><td>Ortsname → Koordinaten, IANA-Zeitzone, historischer UTC-Offset</td><td><code>resolve_location</code>, <code>geocode</code></td></tr>
+<tr><td>Sonnenauf- und -untergang</td><td>Hindu-Aufgang: Scheibenmitte, ohne Refraktion</td><td><code>_sun_rise_set</code></td></tr>
+<tr><td>Vāra</td><td>von Sonnenaufgang zu Sonnenaufgang</td><td>wie <code>vedic_day</code></td></tr>
+<tr><td>Pañcāṅga</td><td>Tithi, Nakṣatra, Yoga, Karaṇa aus Sonne und Mond</td><td><code>compute_panchang</code></td></tr>
+<tr><td>Aspekte</td><td>Graha-Dṛṣṭi: alle 7., Mars 4/8, Jupiter 5/9, Saturn 3/10, Rāhu 5/9</td><td><code>graha_aspects_by_sign</code></td></tr>
+<tr><td>Rückläufigkeit, Verbrennung</td><td>Längengeschwindigkeit &lt; 0; Orbis 8° zur Sonne</td><td><code>_retro_flags</code>, <code>_COMBUST_ORB</code></td></tr>
+</tbody></table></div>
+<p>Der Muhūrta gilt für den <strong>Handelsort</strong>, an dem die Order aufgegeben wird. Sonnenaufgang, Rāhu Kāla, Horā und Muhūrta-Lagna werden dort gerechnet und in dessen Ortszeit angezeigt. Die Horā läuft in 60-Minuten-Schritten ab Sonnenaufgang wie in der Engine; proportionale Horās (Tag- und Nachtbogen je in 12 Teile) sind per Schalter wählbar.</p>
+<p>Geprüft werden nur Zeitpunkte innerhalb der Handelszeit des gewählten Marktes (SIX, Xetra, LSE, NYSE/Nasdaq, Krypto oder ganzer Tag). Sie werden dem <strong>Handelstag des Marktes</strong> zugeordnet. Von Asien aus bleibt die US-Sitzung so ein zusammenhängender Tag, auch wenn sie über Mitternacht Ortszeit läuft.</p>
+</section>
+
+<section class="methodik" id="phase">
+<h2>Ebene 1 und 2: Phase</h2>
+<p>Die Phase fasst Daśā und Transit zu einer Summe zusammen: ab +3 «günstige Phase für Risiko», ab −2 und darunter «zurückhaltende Phase», dazwischen «gemischte Phase». Sie gilt für den ganzen Zeitraum gleich und geht deshalb nicht in den Score der Zeitpunkte ein.</p>
+<p><strong>Daśā.</strong> Bewertet werden Mahā-, Antar- und Pratyantardaśā aus <code>build_dashas</code> der Engine (Viṃśottarī, Stand heute). Je Daśā-Herr:</p>
+<ul>
+<li>+1 für jede Herrschaft über das 1., 2., 5., 9. oder 11. Haus, −1 für jede über das 6., 8. oder 12.</li>
+<li>+1, wenn er im Radix im 1., 2., 5., 9., 10. oder 11. Haus steht, −1 im 6., 8. oder 12.</li>
+</ul>
+<p><strong>Transit vom Janma-Mond</strong> (Stand am Startdatum):</p>
+<div class="tabelle"><table class="grahas">
+<thead><tr><th>Graha</th><th>günstig (+1)</th><th>ungünstig (−1)</th></tr></thead>
+<tbody>
+<tr><td>Jupiter</td><td>2, 5, 7, 9, 11</td><td>4, 8, 12</td></tr>
+<tr><td>Saturn</td><td>3, 6, 11</td><td>12, 1, 2 (Sāḍe Sātī), 4, 8 (Kaṇṭaka, Aṣṭama Śani)</td></tr>
+<tr><td>Rāhu</td><td>3, 6, 11</td><td>8, 12</td></tr>
+</tbody></table></div>
+</section>
+
+<section class="methodik" id="sperren">
+<h2>Ebene 3: Sperren</h2>
+<p>Ein gesperrter Zeitpunkt scheidet aus, unabhängig von seinem Score. Die App zeigt ihn schraffiert, nennt den Grund und den Score ohne Sperre.</p>
+<div class="tabelle"><table class="grahas">
+<thead><tr><th>Sperre</th><th>Regel</th></tr></thead>
+<tbody>
+<tr><td>Rāhu Kāla</td><td>Achtel des Tagbogens nach Wochentag (So 8, Mo 2, Di 7, Mi 5, Do 6, Fr 4, Sa 3)</td></tr>
+<tr><td>Durmuhūrta</td><td>Muhūrta Nr. (von 15) im Tagbogen: So 14, Mo 9 und 12, Di 4, Mi 8, Do 6 und 12, Fr 4 und 9, Sa 1 und 2; dienstags zusätzlich das 7. der Nacht</td></tr>
+<tr><td>Amāvasyā</td><td>30. Tithi (Neumond)</td></tr>
+<tr><td>Viṣṭi-Karaṇa</td><td>Bhadrā</td></tr>
+<tr><td>Yoga</td><td>Vyatīpāta oder Vaidhṛti</td></tr>
+<tr><td>Vadha-Tārā</td><td>7. Tārā vom Janma-Nakṣatra</td></tr>
+<tr><td>Candrāṣṭama</td><td>Mond im 8. Zeichen vom Janma-Mond</td></tr>
+<tr><td>Mond im 8.</td><td>8. Haus vom Muhūrta-Lagna</td></tr>
+<tr><td>Übeltäter im Lagna</td><td>Mars, Saturn, Rāhu oder Ketu im Muhūrta-Lagna (abschaltbar: dann −3)</td></tr>
+<tr><td>Verkaufs-Pflicht</td><td>nur Verkauf: 11. Herr, 2. Haus oder Lagna-Herr mit zwei oder mehr Belastungen</td></tr>
+</tbody></table></div>
+</section>
+
+<section class="methodik" id="kauf">
+<h2>Bewertung beim Kauf</h2>
+<p>Jeder nicht gesperrte Zeitpunkt erhält Punkte aus allen zutreffenden Faktoren. Häuser zählen vom Muhūrta-Lagna, sofern nicht anders vermerkt.</p>
+<p><strong>Gewichtung:</strong> Nakṣatra sowie Lagna mit Hausherrschaft wiegen am meisten. Tithi, Yoga, Karaṇa und Horā fliessen nur schwach ein; ihre klassischen Sperren (Amāvasyā, Viṣṭi, Vyatīpāta, Vaidhṛti) bleiben aber bestehen.</p>
+<div class="tabelle"><table class="grahas">
+<thead><tr><th>Bereich</th><th>Faktor</th><th>Punkte</th></tr></thead>
+<tbody>
+<tr><td>Nakṣatra</td><td>Trading-Nakṣatra: Aśvinī, Mṛgaśirā, Punarvasu, Hasta, Citrā, Svātī, Anurādhā, Śravaṇa, Dhaniṣṭhā, Revatī</td><td>+4</td></tr>
+<tr><td></td><td>sonst Kraya-Nakṣatra der Muhūrta Cintāmaṇi (Śatabhiṣā)</td><td>+3</td></tr>
+<tr><td></td><td>Vikraya-Nakṣatra: Bharaṇī, Kṛttikā, Āśleṣā, die drei Pūrvas</td><td>−3</td></tr>
+<tr><td></td><td>Amṛta-Siddhi-Yoga (Vāra + Nakṣatra)</td><td>+2</td></tr>
+<tr><td>Tithi</td><td>2, 3, 5, 7, 10, 11, 13 / Riktā 4, 9, 14 / Aṣṭamī</td><td>+1 / −2 / −1</td></tr>
+<tr><td></td><td>Dagdha-Tithi des Wochentags</td><td>−1</td></tr>
+<tr><td></td><td>zunehmender Mond</td><td>+1</td></tr>
+<tr><td>Vāra</td><td>Mi / Do / Fr / Di, Sa</td><td>+3 / +2 / +1 / −2</td></tr>
+<tr><td>Yoga, Karaṇa</td><td>Viṣkambha, Atigaṇḍa, Śūla, Gaṇḍa, Vyāghāta, Vajra, Parigha / Vaṇija</td><td>−1 / +1</td></tr>
+<tr><td>Horā (schwach)</td><td>Merkur, Jupiter, Venus / Mars, Saturn</td><td>+1 / −1</td></tr>
+<tr><td>Tagesabschnitte</td><td>Yamagaṇḍa / Gulika Kāla / Kāla Velā</td><td>−3 / −2 / −2</td></tr>
+<tr><td></td><td>Abhijit, ausser mittwochs</td><td>+2</td></tr>
+<tr><td>Tārābala</td><td>Sampat, Kṣema, Sādhaka, Mitra, Parama Mitra / Vipat, Pratyari / Janma</td><td>+2 / −3 / −1</td></tr>
+<tr><td>Candrabala</td><td>Mond im 1., 3., 6., 7., 10., 11. / 4., 12. vom Janma-Mond</td><td>+2 / −2</td></tr>
+<tr><td>Lagna</td><td>Sonne im Lagna / 8. Haus besetzt</td><td>−1 / −2</td></tr>
+<tr><td></td><td>Wohltäter (Merkur, Jupiter, Venus) in Kendra oder Trikoṇa, höchstens</td><td>+2</td></tr>
+<tr><td>Lagna-Herr</td><td>in Kendra, Trikoṇa oder 11. / in 6, 8, 12</td><td>+2 / −3</td></tr>
+<tr><td></td><td>mit Mars, Saturn, Rāhu oder Ketu / verbrannt</td><td>−1 / −1</td></tr>
+<tr><td>Mond</td><td>im 6. oder 12. / innerhalb 8° von Rāhu oder Ketu</td><td>−2 / −3</td></tr>
+<tr><td>Merkur</td><td>im 1., 2., 5., 10., 11. / im 6., 8., 12.</td><td>+2 / −2</td></tr>
+<tr><td></td><td>rückläufig / verbrannt / mit Übeltäter</td><td>−2 / −2 / −1</td></tr>
+<tr><td></td><td>belastet und zugleich 8. Herr im Radix</td><td>−1</td></tr>
+<tr><td></td><td>Svātī mit unbelastetem, gut gestelltem Merkur</td><td>+1</td></tr>
+<tr><td>2. und 5. Haus</td><td>besetzt von Mars, Saturn, Ketu / nur Sonne</td><td>−2 / −1</td></tr>
+<tr><td>(je Haus)</td><td>aspektiert von Übeltäter / Herr in 6, 8, 12 / unbelastet</td><td>−1 / −2 / +1</td></tr>
+<tr><td></td><td>Rāhu im 5. bei schwachem / gut gestelltem 5. Herrn</td><td>−3 / −1</td></tr>
+<tr><td>11. Haus</td><td>Herr in Kendra, Trikoṇa oder 11. / in 6, 8, 12</td><td>+2 / −3</td></tr>
+<tr><td></td><td>Wohltäter im 11. / Rāhu im 11.</td><td>+1 / +1</td></tr>
+<tr><td>Jupiter, Venus</td><td>Jupiter im 2., 5., 9., 11. / Aspekt auf eines davon</td><td>+2 / +1</td></tr>
+<tr><td></td><td>Venus im 2. oder 11.</td><td>+1</td></tr>
+<tr><td>Radix</td><td>Herren von Janma-Lagna und 5. Radix-Haus in Kendra, Trikoṇa, 11. / in 6, 8, 12</td><td>+2 / −2</td></tr>
+<tr><td></td><td>Muhūrta-Lagna im 2., 11. / 1., 10. / 6., 8., 12. vom Janma-Lagna</td><td>+2 / +1 / −2</td></tr>
+</tbody></table></div>
+<p>Übeltäter im 11. Haus werden nicht bestraft, weil es ein Upacaya-Haus ist. Rāhu gilt für Spekulation nicht pauschal als schlecht; entscheidend ist der Zustand des 5. Herrn.</p>
+</section>
+
+<section class="methodik" id="verkauf">
+<h2>Verkaufsprofil</h2>
+<p>Beim Verkauf (Exit, Gewinnmitnahme bei Aktien und ETFs) zählt die Realisierung des Gewinns mehr als ein einzelnes Nakṣatra. Es gilt dieselbe Grundbewertung, mit diesen Abweichungen:</p>
+<div class="tabelle"><table class="grahas">
+<thead><tr><th>Priorität</th><th>Kriterium</th><th>Umsetzung</th></tr></thead>
+<tbody>
+<tr><td>Pflicht</td><td>11. Haus / 11. Herr stark</td><td>Herr in 6, 8, 12, verbrannt oder mit Mars, Saturn, Rāhu, Ketu = je eine Belastung; 11. Haus doppelt gewichtet</td></tr>
+<tr><td>Pflicht</td><td>2. Haus stabil</td><td>Mars, Saturn, Rāhu oder Ketu im 2. sowie jede Belastung des 2. Herrn = Belastung; unbelastet +2</td></tr>
+<tr><td>Pflicht</td><td>Lagna-Herr stark</td><td>Belastungen wie beim 11. Herrn; gut gestellt +3</td></tr>
+<tr><td></td><td></td><td>je Pflichtkriterium: eine Belastung −3, ab zwei Belastungen gesperrt</td></tr>
+<tr><td>Sehr wichtig</td><td>Merkur stark</td><td>Regeln wie beim Kauf</td></tr>
+<tr><td>Sehr wichtig</td><td>Mond nicht in 6, 8, 12</td><td>8. gesperrt, 6. oder 12. −3</td></tr>
+<tr><td>Gut</td><td>Jupiter-Bezug zu 2, 5, 11</td><td>im Haus +2, Aspekt +1</td></tr>
+<tr><td>Gut</td><td>abnehmender Mond</td><td>+1 (zunehmender Mond zählt hier nicht)</td></tr>
+<tr><td>Feinabstimmung</td><td>Merkur-, Jupiter-, Venus-Horā</td><td>+1</td></tr>
+<tr><td>Radix</td><td>Herren von Janma-Lagna, 2., 5., 11. Radix-Haus</td><td>gut gestellt +3, in 6, 8, 12 −3</td></tr>
+<tr><td>Nakṣatra</td><td>Hasta, Svātī, Anurādhā, Śravaṇa, Dhaniṣṭhā, Revatī / übrige Vikraya-Nakṣatras</td><td>+3 / +2</td></tr>
+<tr><td>Meiden</td><td>Mars im 11. / Mars-Aspekt auf 2. oder 11.</td><td>−2 / −1 zusätzlich</td></tr>
+</tbody></table></div>
+<p>Die Schwelle «ab zwei Belastungen» ist bewusst gewählt. Mit einer Sperre schon bei einer Belastung gab es im Oktober 2026 für ein Vṛścika-Radix vier Wochen lang kein einziges Verkaufsfenster an SIX oder NYSE, weil in den Handelsstunden fast nur Tulā, Vṛścika und Dhanu aufsteigen. Die Schwelle ist über <code>PFLICHT_GRENZE</code> einstellbar.</p>
+</section>
+
+<section class="methodik" id="radix">
+<h2>Individualisierung über das Radix</h2>
+<p>Derselbe Zeitpunkt wird für zwei Menschen verschieden bewertet. Das Radix geht an fünf Stellen ein, alle aus <code>generate_chart</code> und <code>compute_lordships</code> abgeleitet, nie als feste Planetennamen:</p>
+<ul>
+<li><strong>Tārābala:</strong> Zählung vom Janma-Nakṣatra zum Nakṣatra des Moments.</li>
+<li><strong>Candrabala:</strong> Zeichen des Mondes vom Janma-Mond.</li>
+<li><strong>Radix-Herren im Muhūrta:</strong> beim Kauf die Herren von 1. und 5. Haus, beim Verkauf die von 1., 2., 5. und 11. Haus.</li>
+<li><strong>Merkur als 8. Herr:</strong> beherrscht Merkur im Radix das 8. Haus, kostet jede Belastung Merkurs im Muhūrta zusätzlich einen Punkt.</li>
+<li><strong>Lagna-Bezug:</strong> Stellung des Muhūrta-Lagna vom Janma-Lagna.</li>
+</ul>
+<p>Beispiel Vṛścika-Lagna: Mars ist Lagna-Herr, Jupiter Herr von 2. und 5., Merkur Herr von 8. und 11. Für einen Exit zählen damit Mars, Jupiter und Merkur mit je ±3, und Merkur wird strenger beurteilt als nach der Standardregel «Merkur ist gut für Handel».</p>
+</section>
+
+<section class="methodik" id="score">
+<h2>Score, Zeitfenster und Darstellung</h2>
+<p>Der Score ist die Summe aller Punkte eines Zeitpunkts. Benachbarte Zeitpunkte mit gleichem Score am selben Handelstag werden zu einem Zeitfenster verbunden.</p>
+<div class="tabelle"><table class="grahas">
+<thead><tr><th>Stufe</th><th>Score</th></tr></thead>
+<tbody>
+<tr><td>★★★ sehr günstig</td><td>ab 12</td></tr>
+<tr><td>★★ günstig</td><td>ab 8</td></tr>
+<tr><td>★ brauchbar</td><td>ab Mindestscore (Standard 5)</td></tr>
+</tbody></table></div>
+<p>Die App zeigt je Handelstag eine Leiste über die Handelszeit: je heller, desto höher der Score, schraffiert gesperrt, unterstrichen die drei besten Fenster des Tages. Ab acht Tagen erscheinen zuerst die zehn besten Fenster des ganzen Zeitraums (bis 90 Tage). Ein Klick auf einen Zeitpunkt öffnet das Muhūrta-Detail mit Chart (nord- oder südindisch, als Rāśi- oder Äqui-Bhāva-Chart), Pañcāṅga mit Endzeiten, allen Faktoren und den Häusern jedes Graha vom Muhūrta-Lagna, Janma-Lagna und Janma-Mond.</p>
+<p>Das <strong>Äqui-Bhāva-Chart</strong> (Bhāva Chalit) nimmt den Lagna-Grad als Mitte jedes Hauses; jedes Haus reicht ±15° um diese Mitte, wie in <code>generate_chart</code> der Engine. Grahas, die dadurch das Haus wechseln, sind im Chart hervorgehoben und in der Grahas-Tabelle fett. Es dient der Ansicht; die Bewertung rechnet weiterhin mit ganzen Zeichen.</p>
+<p>Dieselben Regeln laufen in der App, im Kommandozeilenprogramm und in der wöchentlichen GitHub-Action. Alle Gewichte stehen als Konstanten am Anfang von <code>muhurta_trading.py</code>.</p>
+</section>
+
+<section class="methodik" id="grenzen">
+<h2>Grenzen und Hinweis</h2>
+<ul>
+<li><strong>Gewichtung:</strong> Die klassischen Texte nennen günstige und ungünstige Faktoren, aber kein Punktesystem. Die Punktwerte sind eine eigene, nachvollziehbare Synthese und einstellbar.</li>
+<li><strong>Fehlende Kombinationen:</strong> Von den Tithi-Nakṣatra-Vāra-Kombinationen sind nur Dagdha-Tithi und Amṛta-Siddhi umgesetzt.</li>
+<li><strong>Kalender:</strong> Börsenfeiertage werden nicht erkannt; Handelszeiten sind die regulären Sitzungen ohne Vor- und Nachbörse.</li>
+<li><strong>Raster:</strong> Bewertet wird der Beginn jedes Rasterschritts. Ein Wechsel von Lagna oder Horā innerhalb des Schritts wird erst am nächsten Zeitpunkt sichtbar.</li>
+<li><strong>Phase:</strong> Daśā steht auf heute, der Transit auf dem Startdatum. Über 90 Tage kann ein Transit das Zeichen wechseln.</li>
+<li><strong>Geburtszeit:</strong> Lagna-abhängige Faktoren (Radix-Herren, Lagna-Bezug, Merkur als 8. Herr) sind nur so genau wie die Geburtszeit.</li>
+</ul>
+<p>Das Programm ist eine astrologische Auswertung. Es ist keine Anlageberatung und kein Handelssignal.</p>
+</section>
+
+<section class="methodik" id="quellen">
+<h2>Quellen</h2>
+<ul>
+<li>Muhūrta Cintāmaṇi (Rāma Daivajña): Kraya- und Vikraya-Nakṣatras, Tithi-, Vāra- und Yoga-Regeln, Durmuhūrta.</li>
+<li>Bṛhat Parāśara Horā Śāstra: Häuser, Herrschaft, Graha-Dṛṣṭi, Viṃśottarī Daśā.</li>
+<li>Tārābala, Candrabala, Rāhu Kāla, Yamagaṇḍa, Gulika und Abhijit nach allgemeiner Pañcāṅga-Praxis.</li>
+<li>Trading-Gewichtung (Merkur, 2./5./11. Haus, Verkaufsprioritäten): eigene Vorgaben, Stand Oktober 2026.</li>
+<li>Rechenkern: <code>astro_engine.py</code>, Repository Ved Chart Calc.</li>
+</ul>
+</section>

@@ -85,7 +85,7 @@ Drei Ebenen: **Phase** (Daśā und Transit vom Janma-Mond) als Ampel oben, darun
 **Muhūrta** jedes Zeitpunkts mit Score. Die Phase gilt für den ganzen Zeitraum gleich und
 geht deshalb nicht in den Score ein.
 
-**Gewichtung:** Nakṣatra sowie Lagna mit Hausherrschaft wiegen am meisten; Tithi, Yoga und Karaṇa nur schwach (ihre Sperren bleiben).
+**Gewichtung:** Nakṣatra sowie Lagna mit Hausherrschaft wiegen am meisten; Tithi, Yoga, Karaṇa und Horā nur schwach (ihre Sperren bleiben).
 
 **Sperren** (Zeitpunkt ausgeschlossen): Rāhu Kāla, Durmuhūrta, Amāvasyā, Viṣṭi-Karaṇa,
 Vyatīpāta/Vaidhṛti-Yoga, Vadha-Tārā, Candrāṣṭama, Mond im 8. vom Muhūrta-Lagna,
@@ -102,8 +102,7 @@ Mars/Saturn/Rāhu/Ketu im Muhūrta-Lagna.
 | | zunehmender Mond, nur beim Kauf | +1 |
 | Vāra | Mi / Do / Fr / Di, Sa | +3 / +2 / +1 / −2 |
 | Yoga, Karaṇa | ungünstiger Yoga / Vaṇija-Karaṇa | −1 / +1 |
-| Horā | Merkur / Jupiter, Venus / Mond / Mars, Saturn | +3 / +2 / +1 / −2 |
-| | Horā-Herr = Herr des 2. oder 11. Radix-Hauses | +1 |
+| Horā (schwach) | Merkur, Jupiter, Venus / Mars, Saturn | +1 / −1 |
 | Tagesabschnitte | Yamagaṇḍa / Gulika / Kāla Velā | −3 / −2 / −2 |
 | | Abhijit (nicht mittwochs) | +2 |
 | Tārā, Candrabala | Sampat, Kṣema, Sādhaka, Mitra, Parama Mitra / Vipat, Pratyari / Janma | +2 / −3 / −1 |
@@ -143,7 +142,7 @@ Im Modus *verkauf* gilt eine eigene Gewichtung:
 | Sehr wichtig | Mond nicht in 6/8/12 | 8. gesperrt, 6./12. −3 |
 | Gut | Jupiter im oder Aspekt auf 2/5/11 | +2 / +1 |
 | Gut | abnehmender Mond | +1 |
-| Gut | Merkur-, Jupiter-, Venus-Horā | +3 / +2 / +2 |
+| Feinabstimmung | Merkur-, Jupiter-, Venus-Horā | +1 |
 | Radix | Herren von Janma-Lagna, 2., 5., 11. Haus im Muhūrta | gut gestellt +3, in 6/8/12 −3 |
 | Nakṣatra | Hasta, Svātī, Anurādhā, Śravaṇa, Dhaniṣṭhā, Revatī / sonst MC-Vikraya | +3 / +2 |
 | Meiden | Mars im 11. / Mars-Aspekt auf 2. oder 11. | −2 / −1 zusätzlich |
