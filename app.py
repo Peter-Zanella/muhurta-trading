@@ -151,6 +151,7 @@ def parameter(q) -> tuple[dict, list[str]]:
         "glat": _wert(q, "glat", "" if _env("GEBURT_ORT") else _env("GEBURT_LAT")),
         "glon": _wert(q, "glon", "" if _env("GEBURT_ORT") else _env("GEBURT_LON")),
         "gtz": _wert(q, "gtz", "" if _env("GEBURT_ORT") else _env("GEBURT_TZ")),
+        "person": _wert(q, "person", _env("GEBURT_NAME"))[:60],
     }
     if p["modus"] not in ("kauf", "verkauf"):
         fehler.append("Modus muss «kauf» oder «verkauf» sein.")
@@ -208,7 +209,7 @@ def parameter(q) -> tuple[dict, list[str]]:
     return p, fehler
 
 
-FORMFELDER = ("hort", "geburt", "gort", "glat", "glon", "gtz")
+FORMFELDER = ("hort", "geburt", "gort", "glat", "glon", "gtz", "person")
 
 
 def geburt_query(p: dict) -> dict:
@@ -285,6 +286,16 @@ details.geburt{flex-basis:100%;min-width:0;color:var(--leise);font-size:.9rem}
 details.geburt summary{cursor:pointer}
 details.geburt .felder{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px}
 details.koordinaten{margin-top:12px}
+.personen{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-top:10px;
+  padding-bottom:12px;border-bottom:1px solid var(--linie)}
+.person-knoepfe{display:flex;flex-wrap:wrap;gap:8px}
+button.zweit,label.zweit{background:transparent;color:var(--text);border:1px solid var(--linie);
+  border-radius:6px;padding:8px 12px;font:500 .9rem "Work Sans",system-ui,sans-serif;cursor:pointer;
+  flex-direction:row}
+button.zweit:hover,label.zweit:hover{border-color:var(--kurkuma)}
+label.datei input{position:absolute;width:1px;height:1px;opacity:0}
+label.datei:focus-within{outline:2px solid var(--kurkuma);outline-offset:2px}
+.person-status{flex-basis:100%;margin:0;min-height:1.2em}
 label.ort{flex:1 1 220px;min-width:0;max-width:100%}
 label.ort input{width:100%}
 .hinweis{color:#e8c27a}
@@ -432,7 +443,19 @@ def formular(p: dict) -> str:
   <label>Mindestscore<input type="number" name="min" value="{E(str(p['min']))}"></label>
   <label class="ort">Handelsort<input name="hort" value="{E(p['hort'])}" placeholder="z. B. Zürich, Schweiz"></label>
   <button type="submit">Zeitfenster berechnen</button>
-  <details class="geburt"{offen}><summary>Geburtsdaten</summary>
+  <details class="geburt"{offen}><summary>Geburtsdaten{" – " + E(p["person"]) if p["person"] else ""}</summary>
+    <input type="hidden" name="person" value="{E(p['person'])}">
+    <div class="personen">
+      <label>Gespeicherte Person<select id="person-wahl"><option value="">Person wählen</option></select></label>
+      <label>Name<input id="person-name" value="{E(p['person'])}" placeholder="Name zum Speichern" maxlength="60"></label>
+      <div class="person-knoepfe">
+        <button type="button" class="zweit" id="person-speichern">Speichern</button>
+        <button type="button" class="zweit" id="person-loeschen">Löschen</button>
+        <button type="button" class="zweit" id="person-export">Exportieren</button>
+        <label class="zweit datei">Importieren<input type="file" accept=".json,application/json" id="person-import"></label>
+      </div>
+      <p class="person-status leise" role="status" aria-live="polite"></p>
+    </div>
     <div class="felder">
       <label>Geburtszeit (Ortszeit)<input type="datetime-local" name="geburt" value="{E(geburt_wert)}"></label>
       <label class="ort">Geburtsort<input name="gort" value="{E(p['gort'])}" placeholder="z. B. Liestal, Schweiz"></label>
@@ -445,7 +468,68 @@ def formular(p: dict) -> str:
       </div>
     </details>
   </details>
-</form>"""
+</form>""" + PERSONEN_SKRIPT
+
+
+PERSONEN_SKRIPT = """<script>
+(function(){
+  var KEY='muhurta_personen';
+  var f=document.querySelector('form.steuerung'); if(!f||!f.person) return;
+  var wahl=document.getElementById('person-wahl'), name=document.getElementById('person-name'),
+      status=document.querySelector('.person-status');
+  var FELDER=['geburt','gort','glat','glon','gtz'];
+  function melde(t){status.textContent=t;}
+  function lade(){try{var a=JSON.parse(localStorage.getItem(KEY)||'[]');return Array.isArray(a)?a:[];}
+    catch(e){return null;}}
+  function sichere(a){try{localStorage.setItem(KEY,JSON.stringify(a));return true;}
+    catch(e){melde('Speichern im Browser ist hier nicht möglich (privater Modus?).');return false;}}
+  function gueltig(x){return x&&typeof x.name==='string'&&x.name.trim()&&typeof x.geburt==='string';}
+  function liste(){
+    var a=lade(); if(a===null){melde('Gespeicherte Personen sind in diesem Browser nicht lesbar.');a=[];}
+    a.sort(function(x,y){return x.name.localeCompare(y.name,'de');});
+    wahl.length=1;
+    a.forEach(function(x){var o=document.createElement('option');o.value=x.name;o.textContent=x.name;
+      if(x.name===f.person.value)o.selected=true;wahl.appendChild(o);});
+    return a;}
+  function aktuelle(){var x={name:name.value.trim()};
+    FELDER.forEach(function(k){x[k]=(f[k].value||'').trim();});return x;}
+  wahl.addEventListener('change',function(){
+    var x=lade().filter(function(y){return y.name===wahl.value;})[0]; if(!x) return;
+    FELDER.forEach(function(k){f[k].value=x[k]||'';});
+    f.person.value=x.name; name.value=x.name; f.submit();});
+  FELDER.forEach(function(k){f[k].addEventListener('input',function(){f.person.value='';});});
+  document.getElementById('person-speichern').addEventListener('click',function(){
+    var x=aktuelle();
+    if(!x.name){melde('Name eintragen, dann speichern.');name.focus();return;}
+    if(!x.geburt||!(x.gort||(x.glat&&x.glon))){melde('Geburtszeit und Geburtsort eintragen, dann speichern.');return;}
+    var a=(lade()||[]).filter(function(y){return y.name!==x.name;}); a.push(x);
+    if(sichere(a)){f.person.value=x.name;liste();melde('«'+x.name+'» gespeichert.');}});
+  document.getElementById('person-loeschen').addEventListener('click',function(){
+    var n=wahl.value||name.value.trim();
+    if(!n){melde('Erst eine Person wählen.');return;}
+    if(!confirm('«'+n+'» aus der Liste löschen?')) return;
+    var a=(lade()||[]).filter(function(y){return y.name!==n;});
+    if(sichere(a)){if(f.person.value===n)f.person.value='';liste();melde('«'+n+'» gelöscht.');}});
+  document.getElementById('person-export').addEventListener('click',function(){
+    var a=lade()||[]; if(!a.length){melde('Keine gespeicherten Personen.');return;}
+    var b=new Blob([JSON.stringify(a,null,2)],{type:'application/json'});
+    var l=document.createElement('a'); l.href=URL.createObjectURL(b); l.download='muhurta-personen.json';
+    document.body.appendChild(l); l.click(); l.remove(); setTimeout(function(){URL.revokeObjectURL(l.href);},1000);
+    melde(a.length+' Personen exportiert.');});
+  document.getElementById('person-import').addEventListener('change',function(ev){
+    var d=ev.target.files&&ev.target.files[0]; if(!d) return;
+    d.text().then(function(t){
+      var neu=JSON.parse(t); if(!Array.isArray(neu)) throw 0;
+      neu=neu.filter(gueltig).map(function(x){var y={name:x.name.trim().slice(0,60)};
+        FELDER.forEach(function(k){y[k]=String(x[k]||'').trim();});return y;});
+      var namen=neu.map(function(x){return x.name;});
+      var a=(lade()||[]).filter(function(y){return namen.indexOf(y.name)<0;}).concat(neu);
+      if(sichere(a)){liste();melde(neu.length+' Personen importiert.');}
+    }).catch(function(){melde('Datei nicht lesbar. Erwartet wird eine exportierte JSON-Datei.');});
+    ev.target.value='';});
+  liste();
+})();
+</script>"""
 
 
 def basis_query(p: dict) -> dict:
@@ -668,7 +752,8 @@ def radix_html(p: dict, radix) -> str:
     herren = ", ".join(sorted(mt.PLANET_DE[x] for x in radix.wohlstandsherren))
     geschaetzt = (' <span class="hinweis">Zeitzone nur geschätzt – Koordinaten und '
                   'Zeitzone manuell eintragen.</span>') if g.get("approx") else ""
-    return (f'<p class="radix">Mond in <strong>{E(mt.RASHI[radix.mond_rashi])}</strong>, '
+    wer = f'<strong>{E(p["person"])}</strong>: ' if p.get("person") else ""
+    return (f'<p class="radix">{wer}Mond in <strong>{E(mt.RASHI[radix.mond_rashi])}</strong>, '
             f'Nakṣatra <strong>{E(mt.NAKSHATRA[radix.mond_nak])}</strong>, Lagna '
             f'<strong>{E(mt.RASHI[radix.lagna_rashi])}</strong>. Herren von 2. und 11. Haus: '
             f'{E(herren)}.<br>Geburtsort {E(g["label"])} ({g["lat"]:.4f}, {g["lon"]:.4f}, '

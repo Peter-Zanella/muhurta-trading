@@ -54,6 +54,10 @@ Build Ved Chart Calc nach `./engine` und schreibt den Engine-Commit in die Fussz
    | `GEBURT`, `GEBURT_ORT` | Standard-Geburtsdaten wie oben |
    | `APP_ORT` | Standard-Handelsort, vorbelegt mit `Wädenswil, Schweiz` |
 
+   Unter «Geburtsdaten» lassen sich Personen unter einem Namen speichern, auswählen, löschen,
+   exportieren und importieren. Die Liste liegt nur im Browser (pro Gerät); mit Export/Import
+   überträgst du sie z. B. vom Laptop aufs iPhone. Optional `GEBURT_NAME` als Name der Standardperson.
+
    Geburtsort und Handelsort lassen sich in der App jederzeit als Ortsname ändern. Die App
    zeigt den gefundenen Ort mit Koordinaten und UTC-Offset an, damit sich das Geocoding prüfen lässt.
 
